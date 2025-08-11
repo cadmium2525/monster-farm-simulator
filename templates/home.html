@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シミュレータ</title>
+    <style>
+        .hiden-form {
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .search-condition-form {
+            margin-bottom: 10px;
+            border: 1px solid #eee;
+            padding: 5px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <h1>モンスターファーム シミュレータ</h1>
+    <hr>
+    
+    <h2>モンスターデータ管理</h2>
+    <form action="/register_monster" method="post">
+        名前: <input type="text" name="monster_name" required>
+        <!-- IDの入力欄を削除 -->
+        <br>
+        <br>
+        秘伝を登録:
+        <div id="hiden-container">
+            <!-- 初期表示の秘伝選択フォーム -->
+            <div class="hiden-form" id="hiden-form-0">
+                <select name="hiden_category" onchange="updateHidenNames(this)">
+                    <option value="">秘伝の種類</option>
+                    {% for category in hiden_master_data_by_category.keys() %}
+                        <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+                <select name="hiden_name">
+                    <option value="">秘伝の名前</option>
+                </select>
+                <select name="hiden_rank">
+                    <option value="">秘伝のランク</option>
+                    <option value="★★★">★★★</option>
+                    <option value="★★☆">★★☆</option>
+                    <option value="★☆☆">★☆☆</option>
+                </select>
+            </div>
+        </div>
+        <button type="button" onclick="addHidenForm()">秘伝追加</button>
+        <button type="submit">モンスターを登録</button>
+    </form>
+
+    <h3>登録済みモンスター</h3>
+    <ul>
+    {% for monster in all_monsters %}
+        <li>
+            {{ monster.name }} (ID: {{ monster.monster_id }})
+            <form action="/delete_monster" method="post" style="display:inline;">
+                <input type="hidden" name="monster_id" value="{{ monster.monster_id }}">
+                <button type="submit">削除</button>
+            </form>
+            <br>
+            <ul>
+            {% for hiden in monster.hidens %}
+                <li>{{ hiden.category }} - {{ hiden.name }} {{ hiden.rank }}</li>
+            {% endfor %}
+            </ul>
+        </li>
+    {% endfor %}
+    </ul>
+    
+    <hr>
+    
+    <h2>親セット管理</h2>
+    <form action="/register_parent_set" method="post">
+        親: 
+        <select name="parent_monster">
+            <option value="">モンスターを選択</option>
+            {% for monster in all_monsters %}
+            <option value="{{ monster.monster_id }}">{{ monster.name }} (ID:{{ monster.monster_id }})</option>
+            {% endfor %}
+        </select>
+        祖父:
+        <select name="grandpa_monster">
+            <option value="">モンスターを選択</option>
+            {% for monster in all_monsters %}
+            <option value="{{ monster.monster_id }}">{{ monster.name }} (ID:{{ monster.monster_id }})</option>
+            {% endfor %}
+        </select>
+        祖母:
+        <select name="grandma_monster">
+            <option value="">モンスターを選択</option>
+            {% for monster in all_monsters %}
+            <option value="{{ monster.monster_id }}">{{ monster.name }} (ID:{{ monster.monster_id }})</option>
+            {% endfor %}
+        </select>
+        <button type="submit">親セットを登録</button>
+    </form>
+    
+    <h3>登録済み親セット</h3>
+    <ul>
+    {% for ps in parent_sets %}
+        <li>
+            親: {{ ps.parent.name }} (ID:{{ ps.parent.monster_id }}), 祖父: {{ ps.grandpa.name }} (ID:{{ ps.grandpa.monster_id }}), 祖母: {{ ps.grandma.name }} (ID:{{ ps.grandma.monster_id }})
+            <form action="/delete_parent_set" method="post" style="display:inline;">
+                <input type="hidden" name="parent_set_index" value="{{ loop.index0 }}">
+                <button type="submit">削除</button>
+            </form>
+        </li>
+    {% endfor %}
+    </ul>
+
+    <hr>
+
+    <h2>検索条件設定</h2>
+    <form action="/run_simulation" method="post">
+        <div id="search-condition-container">
+            {% for i in range(6) %}
+            <div class="search-condition-form">
+                条件{{ i+1 }}:
+                <select name="search_hiden_name_{{ i }}">
+                    <option value="">秘伝を選択</option>
+                    {% for hiden_name in green_hiden_names %}
+                        <option value="{{ hiden_name }}">{{ hiden_name }}</option>
+                    {% endfor %}
+                </select>
+                段階アップ:
+                <select name="search_rank_up_{{ i }}">
+                    <option value="">段階</option>
+                    {% for rank in range(7) %} {# 0から6段階まで #}
+                        <option value="{{ rank }}">{{ rank }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="submit">シミュレーション実行</button>
+    </form>
+    
+    <script>
+        const hidenMasterData = {{ hiden_master_data_by_category | tojson }};
+        let hidenFormCounter = 0; // モンスター秘伝フォームにユニークなIDを割り当てるカウンター
+
+        // モンスター秘伝フォームの秘伝の名前プルダウンを更新する関数
+        function updateHidenNames(categorySelect) {
+            const selectedCategory = categorySelect.value;
+            const currentHidenForm = categorySelect.closest('.hiden-form'); // 親の.hiden-formを探す
+            const hidenNameSelect = currentHidenForm.querySelector('select[name="hiden_name"]');
+            
+            hidenNameSelect.innerHTML = '<option value="">秘伝の名前</option>'; // 一旦クリア
+            
+            if (selectedCategory && hidenMasterData[selectedCategory]) {
+                const hidenNames = Object.keys(hidenMasterData[selectedCategory]);
+                hidenNames.forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    hidenNameSelect.appendChild(option);
+                });
+            }
+        }
+
+        // 新しいモンスター秘伝フォームを追加する関数
+        function addHidenForm() {
+            hidenFormCounter++;
+            const container = document.getElementById('hiden-container');
+            const newForm = document.createElement('div');
+            newForm.className = 'hiden-form';
+            newForm.id = `hiden-form-${hidenFormCounter}`; // ユニークなIDを割り当てる
+            newForm.innerHTML = `
+                <select name="hiden_category" onchange="updateHidenNames(this)">
+                    <option value="">秘伝の種類</option>
+                    {% for category in hiden_master_data_by_category.keys() %}
+                        <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+                <select name="hiden_name">
+                    <option value="">秘伝の名前</option>
+                </select>
+                <select name="hiden_rank">
+                    <option value="">秘伝のランク</option>
+                    <option value="★★★">★★★</option>
+                    <option value="★★☆">★★☆</option>
+                    <option value="★☆☆">★☆☆</option>
+                </select>
+            `;
+            container.appendChild(newForm);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シミュレーション結果</title>
+</head>
+<body>
+    <h1>シミュレーション結果</h1>
+    <hr>
+    {% if error_message %}
+        <p style="color: red;">{{ error_message }}</p>
+        <p><a href="/">ホームに戻る</a></p>
+    {% elif results %}
+        <p>条件を満たす組み合わせが {{ results|length }}件見つかりました！</p>
+        {% for combo in results %}
+        <div>
+            <h3>■ 組み合わせ: {{ combo.father_set.parent.name }} (父) と {{ combo.mother_set.parent.name }} (母)</h3>
+            <ul>
+                <li>父親セット祖父母: {{ combo.father_set.grandpa.name }} (ID:{{ combo.father_set.grandpa.monster_id }}), {{ combo.father_set.grandma.name }} (ID:{{ combo.father_set.grandma.monster_id }})</li>
+                <li>母親セット祖父母: {{ combo.mother_set.grandpa.name }} (ID:{{ combo.mother_set.grandpa.monster_id }}), {{ combo.mother_set.grandma.name }} (ID:{{ combo.mother_set.grandma.monster_id }})</li>
+            </ul>
+            <p><strong>緑秘伝の合計星数:</strong></p>
+            <ul>
+                {% for hiden, stars in combo.green_stars.items() %}
+                <li>{{ hiden }}: 星{{ stars }}個 ({{ combo.get_green_rank_up(stars) }}段階アップ)</li>
+                {% endfor %}
+            </ul>
+            <p><strong>赤秘伝の合計星数:</strong> 星{{ combo.red_stars }}個</p>
+            <p><strong>共通秘伝:</strong> Ⅲ: {{ combo.common_iii }}個, Ⅱ: {{ combo.common_ii }}個</p>
+            <p><strong>ノラモン秘伝:</strong>
+                {% if combo.nora_hidens %}
+                    {# ノラモン秘伝の表示を修正 #}
+                    {% set nora_hiden_display = [] %}
+                    {% for name, count in combo.nora_hidens.items() %}
+                        {% if count > 1 %}
+                            {% set _ = nora_hiden_display.append(name + '（' + count|string + '）') %}
+                        {% else %}
+                            {% set _ = nora_hiden_display.append(name) %}
+                        {% endif %}
+                    {% endfor %}
+                    {{ nora_hiden_display | join(", ") }}
+                {% else %}
+                    なし
+                {% endif %}
+            </p>
+            <hr>
+        </div>
+        {% endfor %}
+        <p><a href="/">ホームに戻る</a></p>
+    {% else %}
+        <p>条件を満たす組み合わせは見つかりませんでした。</p>
+        <p><a href="/">ホームに戻る</a></p>
+    {% endif %}
+</body>
+</html>
