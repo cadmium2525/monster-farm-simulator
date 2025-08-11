@@ -460,6 +460,3 @@ def run_simulation():
 
     return render_template('results.html', results=results, get_green_rank_up=get_green_rank_up)
 
-
-if __name__ == '__main__':
-    app.run(debug=True)
