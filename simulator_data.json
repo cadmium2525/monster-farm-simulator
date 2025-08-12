@@ -1,0 +1,337 @@
+{
+    "monsters": [
+        {
+            "__Monster__": true,
+            "name": "test1",
+            "monster_id": 1001,
+            "hidens": [
+                {
+                    "__Hiden__": true,
+                    "category": "青秘伝",
+                    "name": "ライフ",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "緑秘伝",
+                    "name": "中距離",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "赤秘伝",
+                    "name": "近距離",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "四大大会制覇",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "星統べる六天",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "モンスターダービー",
+                    "rank": "★★★"
+                }
+            ]
+        },
+        {
+            "__Monster__": true,
+            "name": "test2",
+            "monster_id": 1002,
+            "hidens": [
+                {
+                    "__Hiden__": true,
+                    "category": "青秘伝",
+                    "name": "ちから",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "緑秘伝",
+                    "name": "近距離",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "四大大会制覇",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "サンドゴーレム",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "シロゾー",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "星統べる六天",
+                    "rank": "★★☆"
+                }
+            ]
+        },
+        {
+            "__Monster__": true,
+            "name": "test3",
+            "monster_id": 1003,
+            "hidens": [
+                {
+                    "__Hiden__": true,
+                    "category": "青秘伝",
+                    "name": "ライフ",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "緑秘伝",
+                    "name": "遠距離",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "赤秘伝",
+                    "name": "近距離",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "モンスターダービー",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "四大大会制覇",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "ニャー",
+                    "rank": "★☆☆"
+                }
+            ]
+        },
+        {
+            "__Monster__": true,
+            "name": "test4",
+            "monster_id": 1004,
+            "hidens": [
+                {
+                    "__Hiden__": true,
+                    "category": "青秘伝",
+                    "name": "かしこさ",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "緑秘伝",
+                    "name": "雪山",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "モン類秘伝",
+                    "name": "幻霊",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "ディノ",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "スピナー",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "星統べる六天",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "ワールドモンスターズ",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "四大大会制覇",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "モンスターダービー",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "赤秘伝",
+                    "name": "零距離",
+                    "rank": "★★☆"
+                }
+            ]
+        },
+        {
+            "__Monster__": true,
+            "name": "test5",
+            "monster_id": 1005,
+            "hidens": [
+                {
+                    "__Hiden__": true,
+                    "category": "青秘伝",
+                    "name": "命中",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "緑秘伝",
+                    "name": "砂漠",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "赤秘伝",
+                    "name": "零距離",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "四大大会制覇",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "ワールドモンスターズ",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "モン類秘伝",
+                    "name": "幻霊",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "スナイプ",
+                    "rank": "★★★"
+                }
+            ]
+        },
+        {
+            "__Monster__": true,
+            "name": "かどみうむ",
+            "monster_id": 1006,
+            "hidens": [
+                {
+                    "__Hiden__": true,
+                    "category": "青秘伝",
+                    "name": "ちから",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "緑秘伝",
+                    "name": "火山",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "モンスターダービー",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "赤秘伝",
+                    "name": "近距離",
+                    "rank": "★★★"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "四大大会制覇",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "白秘伝",
+                    "name": "星統べる六天",
+                    "rank": "★★☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "スナイプ",
+                    "rank": "★☆☆"
+                },
+                {
+                    "__Hiden__": true,
+                    "category": "ノラモン秘伝",
+                    "name": "マグマハート",
+                    "rank": "★★☆"
+                }
+            ]
+        }
+    ],
+    "parent_sets": [
+        {
+            "__ParentSet__": true,
+            "parent_id": 1001,
+            "grandpa_id": 1002,
+            "grandma_id": 1003
+        },
+        {
+            "__ParentSet__": true,
+            "parent_id": 1004,
+            "grandpa_id": 1005,
+            "grandma_id": 1006
+        },
+        {
+            "__ParentSet__": true,
+            "parent_id": 1001,
+            "grandpa_id": 1002,
+            "grandma_id": 1005
+        },
+        {
+            "__ParentSet__": true,
+            "parent_id": 1003,
+            "grandpa_id": 1004,
+            "grandma_id": 1002
+        },
+        {
+            "__ParentSet__": true,
+            "parent_id": 1001,
+            "grandpa_id": 1004,
+            "grandma_id": 1002
+        }
+    ],
+    "next_monster_id": 1001
+}

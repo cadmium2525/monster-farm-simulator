@@ -120,7 +120,10 @@
         <li>
             親: {{ ps.parent.name }} (ID:{{ ps.parent.monster_id }}), 祖父: {{ ps.grandpa.name }} (ID:{{ ps.grandpa.monster_id }}), 祖母: {{ ps.grandma.name }} (ID:{{ ps.grandma.monster_id }})
             <form action="/delete_parent_set" method="post" style="display:inline;">
-                <input type="hidden" name="parent_set_index" value="{{ loop.index0 }}">
+                {# ParentSetをユニークに識別するため、各モンスターのIDをhiddenフィールドで渡す #}
+                <input type="hidden" name="parent_monster_id" value="{{ ps.parent_monster_id }}">
+                <input type="hidden" name="grandpa_monster_id" value="{{ ps.grandpa_monster_id }}">
+                <input type="hidden" name="grandma_monster_id" value="{{ ps.grandma_monster_id }}">
                 <button type="submit">削除</button>
             </form>
         </li>
@@ -155,7 +158,6 @@
     </form>
     
     <script>
-        // ★修正箇所：JSON.parseとsafeフィルターを使用して、JSONデータを安全に埋め込む
         const hidenMasterData = JSON.parse('{{ hiden_master_data_by_category | tojson | safe }}');
         let hidenFormCounter = 0; // モンスター秘伝フォームにユニークなIDを割り当てるカウンター
 
@@ -182,7 +184,7 @@
         function addHidenForm() {
             hidenFormCounter++;
             const container = document.getElementById('hiden-container');
-            const newForm = document.createElement('div');
+            const newForm = document('div');
             newForm.className = 'hiden-form';
             newForm.id = `hiden-form-${hidenFormCounter}`; // ユニークなIDを割り当てる
 
@@ -195,7 +197,6 @@
                 }
             }
 
-            // JavaScriptのテンプレートリテラル内で変数を埋め込む
             newForm.innerHTML = `
                 <select name="hiden_category" onchange="updateHidenNames(this)">
                     ${categoryOptions} 
