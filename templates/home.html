@@ -15,7 +15,15 @@
             border: 1px solid #eee;
             padding: 5px;
             border-radius: 5px;
-            background-color: #f9f9f9;
+            background-color: #f9f2e6; /* 薄いクリーム色 */
+        }
+        .monster-item-header {
+            cursor: pointer; /* クリック可能であることを示すカーソル */
+            text-decoration: underline; /* クリック可能であることを示す下線 */
+            color: #007bff; /* リンクのような色 */
+        }
+        .monster-item-header:hover {
+            color: #0056b3; /* ホバー時の色変更 */
         }
     </style>
 </head>
@@ -26,7 +34,6 @@
     <h2>モンスターデータ管理</h2>
     <form action="/register_monster" method="post">
         名前: <input type="text" name="monster_name" required>
-        <!-- IDの入力欄を削除 -->
         <br>
         <br>
         秘伝を登録:
@@ -58,17 +65,23 @@
     <ul>
     {% for monster in all_monsters %}
         <li>
-            {{ monster.name }} (ID: {{ monster.monster_id }})
+            {# クリックで秘伝の表示を切り替える部分 #}
+            <span class="monster-item-header" onclick="toggleHidenVisibility('hiden-{{ monster.monster_id }}')">
+                {{ monster.name }} (ID: {{ monster.monster_id }})
+            </span>
             <form action="/delete_monster" method="post" style="display:inline;">
                 <input type="hidden" name="monster_id" value="{{ monster.monster_id }}">
                 <button type="submit">削除</button>
             </form>
             <br>
-            <ul>
-            {% for hiden in monster.hidens %}
-                <li>{{ hiden.category }} - {{ hiden.name }} {{ hiden.rank }}</li>
-            {% endfor %}
-            </ul>
+            {# 折りたたみ対象の秘伝リスト。初期状態は非表示（display: none;） #}
+            <div id="hiden-{{ monster.monster_id }}" style="display: none;">
+                <ul>
+                {% for hiden in monster.hidens %}
+                    <li>{{ hiden.category }} - {{ hiden.name }} {{ hiden.rank }}</li>
+                {% endfor %}
+                </ul>
+            </div>
         </li>
     {% endfor %}
     </ul>
@@ -142,7 +155,8 @@
     </form>
     
     <script>
-        const hidenMasterData = {{ hiden_master_data_by_category | tojson }};
+        // ★修正箇所：JSON.parseとsafeフィルターを使用して、JSONデータを安全に埋め込む
+        const hidenMasterData = JSON.parse('{{ hiden_master_data_by_category | tojson | safe }}');
         let hidenFormCounter = 0; // モンスター秘伝フォームにユニークなIDを割り当てるカウンター
 
         // モンスター秘伝フォームの秘伝の名前プルダウンを更新する関数
@@ -171,12 +185,20 @@
             const newForm = document.createElement('div');
             newForm.className = 'hiden-form';
             newForm.id = `hiden-form-${hidenFormCounter}`; // ユニークなIDを割り当てる
+
+            // 秘伝の種類プルダウンのオプションを動的に生成
+            let categoryOptions = '<option value="">秘伝の種類</option>';
+            // hidenMasterData のキー（カテゴリー名）を JavaScript でループ
+            for (const category in hidenMasterData) {
+                if (hidenMasterData.hasOwnProperty(category)) {
+                    categoryOptions += `<option value="${category}">${category}</option>`;
+                }
+            }
+
+            // JavaScriptのテンプレートリテラル内で変数を埋め込む
             newForm.innerHTML = `
                 <select name="hiden_category" onchange="updateHidenNames(this)">
-                    <option value="">秘伝の種類</option>
-                    {% for category in hiden_master_data_by_category.keys() %}
-                        <option value="{{ category }}">{{ category }}</option>
-                    {% endfor %}
+                    ${categoryOptions} 
                 </select>
                 <select name="hiden_name">
                     <option value="">秘伝の名前</option>
@@ -187,8 +209,29 @@
                     <option value="★★☆">★★☆</option>
                     <option value="★☆☆">★☆☆</option>
                 </select>
+                <button type="button" onclick="removeHidenForm('hiden-form-${hidenFormCounter}')" style="margin-left: 10px;">削除</button>
             `;
             container.appendChild(newForm);
+        }
+
+        // 秘伝フォームを削除する関数
+        function removeHidenForm(formId) {
+            const formToRemove = document.getElementById(formId);
+            if (formToRemove) {
+                formToRemove.remove();
+            }
+        }
+
+        // ★追加：秘伝の表示を切り替えるJavaScript関数
+        function toggleHidenVisibility(hidenDivId) {
+            const hidenDiv = document.getElementById(hidenDivId);
+            if (hidenDiv) {
+                if (hidenDiv.style.display === 'none') {
+                    hidenDiv.style.display = 'block'; // 表示
+                } else {
+                    hidenDiv.style.display = 'none'; // 非表示
+                }
+            }
         }
     </script>
 </body>
