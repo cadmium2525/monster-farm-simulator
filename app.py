@@ -1,7 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for
 import itertools
 import json
-import os # ファイル操作のためにインポート
+import os
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # ---------------------------------
 # 1. クラス定義 (データ構造)
@@ -13,6 +15,18 @@ class Hiden:
         self.category = category
         self.name = name
         self.rank = rank
+    
+    # Firestoreへの保存/読み込みのために辞書に変換するメソッド
+    def to_dict(self):
+        return {
+            "category": self.category,
+            "name": self.name,
+            "rank": self.rank
+        }
+
+    @staticmethod
+    def from_dict(data):
+        return Hiden(data['category'], data['name'], data['rank'])
 
 # モンスターの情報を保持するクラス
 class Monster:
@@ -20,16 +34,41 @@ class Monster:
         self.name = name
         self.monster_id = int(monster_id) # IDは整数として保存
         self.hidens = hidens
+    
+    # Firestoreへの保存/読み込みのために辞書に変換するメソッド
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "monster_id": self.monster_id,
+            "hidens": [h.to_dict() for h in self.hidens]
+        }
+    
+    @staticmethod
+    def from_dict(data):
+        return Monster(data['name'], data['monster_id'], [Hiden.from_dict(h) for h in data['hidens']])
+
 
 # 親と祖父母のセットを管理するクラス
 class ParentSet:
-    def __init__(self, parent, grandpa, grandma):
-        self.parent = parent
-        self.grandpa = grandpa
-        self.grandma = grandma
+    def __init__(self, parent_monster_id, grandpa_monster_id, grandma_monster_id, all_monsters_map):
+        # Monsterオブジェクト自体ではなく、IDを保持する
+        self.parent_monster_id = parent_monster_id
+        self.grandpa_monster_id = grandpa_monster_id
+        self.grandma_monster_id = grandma_monster_id
+
+        # 初期化時にMonsterオブジェクトへの参照を解決
+        self.parent = all_monsters_map.get(parent_monster_id)
+        self.grandpa = all_monsters_map.get(grandpa_monster_id)
+        self.grandma = all_monsters_map.get(grandma_monster_id)
+
+        # 共通秘伝の計算（参照が解決されていることを前提）
         self.common_hiden = self.calculate_common_hiden()
 
     def calculate_common_hiden(self):
+        # Monsterオブジェクトが有効な場合のみ計算
+        if not all([self.parent, self.grandpa, self.grandma]):
+            return {"Ⅲ": 0, "Ⅱ": 0}
+
         white_hidens = [h for h in self.parent.hidens if h.category == "白秘伝"]
         white_hidens.extend([h for h in self.grandpa.hidens if h.category == "白秘伝"])
         white_hidens.extend([h for h in self.grandma.hidens if h.category == "白秘伝"])
@@ -39,6 +78,25 @@ class ParentSet:
         common_iii = sum(1 for count in hiden_counts.values() if count == 3)
         common_ii = sum(1 for count in hiden_counts.values() if count == 2)
         return {"Ⅲ": common_iii, "Ⅱ": common_ii}
+    
+    # Firestoreへの保存/読み込みのために辞書に変換するメソッド
+    def to_dict(self):
+        return {
+            "parent_monster_id": self.parent_monster_id,
+            "grandpa_monster_id": self.grandpa_monster_id,
+            "grandma_monster_id": self.grandma_monster_id
+        }
+    
+    @staticmethod
+    def from_dict(data, all_monsters_map):
+        # データベースから読み込んだIDを使ってParentSetを再構築
+        return ParentSet(
+            data['parent_monster_id'],
+            data['grandpa_monster_id'],
+            data['grandma_monster_id'],
+            all_monsters_map
+        )
+
 
 # 父親セットと母親セットの組み合わせを管理するクラス
 class Combination:
@@ -52,14 +110,14 @@ class Combination:
         self.nora_hidens = self.get_nora_hidens_count() 
 
     def get_total_hidens(self):
-        all_hidens = (
-            self.father_set.parent.hidens + 
-            self.father_set.grandpa.hidens + 
-            self.father_set.grandma.hidens +
-            self.mother_set.parent.hidens + 
-            self.mother_set.grandpa.hidens + 
-            self.mother_set.grandma.hidens
-        )
+        # Monsterオブジェクトが有効な場合のみ秘伝を結合
+        all_hidens = []
+        if self.father_set.parent: all_hidens.extend(self.father_set.parent.hidens)
+        if self.father_set.grandpa: all_hidens.extend(self.father_set.grandpa.hidens)
+        if self.father_set.grandma: all_hidens.extend(self.father_set.grandma.hidens)
+        if self.mother_set.parent: all_hidens.extend(self.mother_set.parent.hidens)
+        if self.mother_set.grandpa: all_hidens.extend(self.mother_set.grandpa.hidens)
+        if self.mother_set.grandma: all_hidens.extend(self.mother_set.grandma.hidens)
         return all_hidens
     
     def calculate_green_and_red_stars(self):
@@ -117,7 +175,6 @@ def add_hiden(category, name, rank):
 def get_json_serializable_hiden_data():
     json_data = {}
     # カテゴリの表示順を定義 (実際のゲーム順があればここを調整)
-    # なければ、キーのソート順でOK
     ordered_categories = [
         "青秘伝", "緑秘伝", "赤秘伝", "白秘伝", 
         "ノラモン秘伝", "モン類秘伝", "六天将秘伝"
@@ -127,22 +184,19 @@ def get_json_serializable_hiden_data():
         if category in hiden_master_data_by_category:
             json_data[category] = {}
             # 秘伝名の表示順も定義 (実際のゲーム順があればここを調整)
-            # なければ、キーのソート順でOK
-            ordered_names = sorted(hiden_master_data_by_category[category].keys()) # とりあえずアルファベット順
+            ordered_names = sorted(hiden_master_data_by_category[category].keys()) 
             
             for name in ordered_names:
                 hiden_objects_from_master = hiden_master_data_by_category[category][name]
                 
-                # ここでhiden_objects_from_masterがリストであることを確認し、そうでない場合はリストでラップ
                 if not isinstance(hiden_objects_from_master, list):
-                    # 予期せぬデータ型の場合（例：単一のHidenオブジェクトが誤って格納された場合）
                     print(f"Warning: Expected list for {category} - {name}, but got {type(hiden_objects_from_master)}. Wrapping in list.")
                     if isinstance(hiden_objects_from_master, Hiden):
                         hiden_objects = [hiden_objects_from_master]
                     else:
-                        hiden_objects = [] # 処理できない場合は空リスト
+                        hiden_objects = [] 
                 else:
-                    hiden_objects = hiden_objects_from_master # 期待通りのリストであればそのまま使用
+                    hiden_objects = hiden_objects_from_master 
 
                 json_data[category][name] = [
                     {"category": h.category, "name": h.name, "rank": h.rank}
@@ -152,7 +206,6 @@ def get_json_serializable_hiden_data():
 
 # --- 各秘伝の定義 ---
 # ここで秘伝の定義順序を、ゲーム内の表示順に近づけることができます。
-# 例: 青秘伝 -> 緑秘伝 -> 赤秘伝 -> 白秘伝 -> ノラモン秘伝 -> モン類秘伝 -> 六天将秘伝
 
 # 青秘伝
 blue_hidens = ["ライフ", "ちから", "かしこさ", "命中", "回避", "丈夫さ"]
@@ -210,6 +263,11 @@ def search_combinations(target_green_hidens, parent_sets_to_choose):
     found_combinations = []
     all_parent_set_pairs = itertools.combinations(parent_sets_to_choose, 2)
     for father_set, mother_set in all_parent_set_pairs:
+        # Monsterオブジェクトが有効でない親セットはスキップ
+        if not all([father_set.parent, father_set.grandpa, father_set.grandma,
+                    mother_set.parent, mother_set.grandpa, mother_set.grandma]):
+            continue
+
         if father_set.parent.monster_id == mother_set.parent.monster_id: # 親が同じIDでないことを確認
             continue
         current_combination = Combination(father_set, mother_set)
@@ -225,115 +283,141 @@ def search_combinations(target_green_hidens, parent_sets_to_choose):
     return found_combinations
 
 # ---------------------------------
-# 4. データ永続化の関数
-# ---------------------------------
-
-DATA_FILE = 'simulator_data.json' # データを保存するファイル名
-
-# オブジェクトを辞書に変換するヘルパー関数 (JSONシリアライズ用)
-def obj_to_dict(obj):
-    if isinstance(obj, Hiden):
-        return {"__Hiden__": True, "category": obj.category, "name": obj.name, "rank": obj.rank}
-    if isinstance(obj, Monster):
-        return {"__Monster__": True, "name": obj.name, "monster_id": obj.monster_id, "hidens": [obj_to_dict(h) for h in obj.hidens]}
-    # ParentSetは、モンスターIDのみを保存し、ロード時に再構築する
-    if isinstance(obj, ParentSet):
-        return {
-            "__ParentSet__": True,
-            "parent_id": obj.parent.monster_id,
-            "grandpa_id": obj.grandpa.monster_id,
-            "grandma_id": obj.grandma.monster_id
-        }
-    raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
-
-# 辞書をオブジェクトに変換するヘルパー関数 (JSONデシリアライズ用)
-def dict_to_obj(dct):
-    # ★ 修正箇所: dctが辞書でない場合はそのまま返す (TypeError回避)
-    if not isinstance(dct, dict):
-        return dct 
-
-    if "__Hiden__" in dct:
-        return Hiden(dct["category"], dct["name"], dct["rank"])
-    if "__Monster__" in dct:
-        hidens_data = dct.get("hidens", [])
-        reconstructed_hidens = []
-        if isinstance(hidens_data, list):
-            for h_item in hidens_data:
-                # h_itemが辞書であれば再帰的にdict_to_objを呼び出す
-                if isinstance(h_item, dict):
-                    reconstructed_hidens.append(dict_to_obj(h_item))
-                # h_itemがすでにHidenオブジェクトであればそのまま追加
-                elif isinstance(h_item, Hiden):
-                    reconstructed_hidens.append(h_item)
-        return Monster(dct["name"], dct["monster_id"], reconstructed_hidens)
-    if "__ParentSet__" in dct:
-        return dct 
-    return dct
-
-def save_data(monsters_data, parent_sets_data):
-    data = {
-        "monsters": [obj_to_dict(m) for m in monsters_data],
-        "parent_sets": [obj_to_dict(ps) for ps in parent_sets_data],
-        "next_monster_id": next_monster_id 
-    }
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-    print("データが保存されました。")
-
-def load_data():
-    global my_monsters, parent_sets, next_monster_id
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r', encoding='utf-8') as f:
-            data = json.load(f, object_hook=dict_to_obj)
-        
-        # モンスターデータをロード
-        my_monsters = [dict_to_obj(m) for m in data.get('monsters', [])]
-        
-        # 次のモンスターIDをロード
-        next_monster_id = data.get('next_monster_id', 1001)
-
-        # parent_setsをロードし、Monsterオブジェクトを再リンク
-        loaded_parent_sets_dicts = data.get('parent_sets', [])
-        parent_sets = []
-        monster_map_by_id = {m.monster_id: m for m in my_monsters}
-        
-        for ps_dict in loaded_parent_sets_dicts:
-            try:
-                parent = monster_map_by_id.get(ps_dict['parent_id'])
-                grandpa = monster_map_by_id.get(ps_dict['grandpa_id'])
-                grandma = monster_map_by_id.get(ps_dict['grandma_id'])
-                
-                # 削除されたモンスターが親セットに紐づいている可能性も考慮
-                if all([parent, grandpa, grandma]):
-                    parent_sets.append(ParentSet(parent, grandpa, grandma))
-            except KeyError:
-                print(f"警告: 存在しないモンスターIDを含む親セットが見つかりました: {ps_dict}")
-                continue 
-
-    else:
-        print("データファイルが見つかりませんでした。新規作成します。")
-        my_monsters = []
-        parent_sets = []
-        next_monster_id = 1001 
-
-# ---------------------------------
-# 5. Flaskアプリケーションの定義
+# 4. Flaskアプリケーションの定義
 # ---------------------------------
 app = Flask(__name__)
 
-# グローバル変数としてモンスターと親セットを定義
-my_monsters = []
-parent_sets = []
-next_monster_id = 1001 
+# Firebase初期化
+try:
+    # Render環境変数からJSONサービスアカウントキーを読み込む
+    service_account_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+    if service_account_json:
+        # JSON文字列を一時ファイルに書き込む
+        # Firebase Admin SDKはファイルパスを期待するため、一時ファイルに書き出す
+        # Renderでは/tmpディレクトリが書き込み可能
+        # ただし、render.comの推奨はJSONをBase64エンコードして渡す方法だが、
+        # ここではよりシンプルなアプローチとして直接JSON文字列をファイルに書き出す。
+        # 本番環境ではもっとセキュアな方法（例えばKMSなど）を検討すべき
+        cred_path = "/tmp/serviceAccountKey.json"
+        with open(cred_path, "w") as f:
+            f.write(service_account_json)
+        
+        cred = credentials.Certificate(cred_path)
+        firebase_admin.initialize_app(cred)
+        print("Firebase Admin SDK initialized successfully.")
+    else:
+        print("GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable not found. Firebase will not be initialized.")
+except Exception as e:
+    print(f"Error initializing Firebase Admin SDK: {e}")
 
-# アプリケーション起動時にデータをロード
-load_data()
+db = firestore.client()
+
+# Cloud Firestoreからデータをロードする関数
+def load_data_from_firestore():
+    monsters = []
+    parent_sets_data = [] # ParentSetはIDを元に後で再構築する
+
+    # モンスターデータをFirestoreから読み込み
+    try:
+        monsters_ref = db.collection('monsters').order_by('monster_id').get()
+        for doc in monsters_ref:
+            monster_data = doc.to_dict()
+            monsters.append(Monster.from_dict(monster_data))
+        print(f"Loaded {len(monsters)} monsters from Firestore.")
+    except Exception as e:
+        print(f"Error loading monsters from Firestore: {e}")
+        monsters = [] # エラー時は空リスト
+
+    # ParentSetデータをFirestoreから読み込み (Monsterオブジェクトはまだ解決しない)
+    try:
+        parent_sets_ref = db.collection('parent_sets').get()
+        for doc in parent_sets_ref:
+            parent_sets_data.append(doc.to_dict())
+        print(f"Loaded {len(parent_sets_data)} parent sets data from Firestore.")
+    except Exception as e:
+        print(f"Error loading parent sets from Firestore: {e}")
+        parent_sets_data = [] # エラー時は空リスト
+    
+    # Monsterオブジェクトのマップを作成してParentSetを再構築
+    monster_map_by_id = {m.monster_id: m for m in monsters}
+    resolved_parent_sets = []
+    for ps_data in parent_sets_data:
+        # ParentSet.from_dictにall_monsters_mapを渡して、Monsterオブジェクトを解決させる
+        resolved_parent_sets.append(ParentSet.from_dict(ps_data, monster_map_by_id))
+    
+    return monsters, resolved_parent_sets
+
+# Firestoreにデータを保存する関数 (モンスターと親セット)
+def save_monster_to_firestore(monster):
+    try:
+        # FirestoreのドキュメントIDとしてmonster_idを使用
+        db.collection('monsters').document(str(monster.monster_id)).set(monster.to_dict())
+        print(f"Monster {monster.name} (ID: {monster.monster_id}) saved to Firestore.")
+    except Exception as e:
+        print(f"Error saving monster {monster.name} to Firestore: {e}")
+
+def delete_monster_from_firestore(monster_id):
+    try:
+        # モンスターを削除
+        db.collection('monsters').document(str(monster_id)).delete()
+        print(f"Monster ID: {monster_id} deleted from Firestore.")
+
+        # このモンスターを親に含むParentSetも削除
+        # FirestoreにはJOINがないため、クエリで削除対象を見つけてループで削除
+        parent_sets_to_delete_ref = db.collection('parent_sets').where('parent_monster_id', '==', monster_id).get()
+        for doc in parent_sets_to_delete_ref:
+            doc.reference.delete()
+            print(f"ParentSet {doc.id} (parent: {monster_id}) deleted from Firestore.")
+        
+        parent_sets_to_delete_ref = db.collection('parent_sets').where('grandpa_monster_id', '==', monster_id).get()
+        for doc in parent_sets_to_delete_ref:
+            doc.reference.delete()
+            print(f"ParentSet {doc.id} (grandpa: {monster_id}) deleted from Firestore.")
+
+        parent_sets_to_delete_ref = db.collection('parent_sets').where('grandma_monster_id', '==', monster_id).get()
+        for doc in parent_sets_to_delete_ref:
+            doc.reference.delete()
+            print(f"ParentSet {doc.id} (grandma: {monster_id}) deleted from Firestore.")
+
+    except Exception as e:
+        print(f"Error deleting monster ID: {monster_id} from Firestore: {e}")
+
+def save_parent_set_to_firestore(parent_set):
+    try:
+        # Firestoreに新しいドキュメントとして追加（自動ID）
+        db.collection('parent_sets').add(parent_set.to_dict())
+        print(f"ParentSet saved to Firestore: Parent ID={parent_set.parent_monster_id}")
+    except Exception as e:
+        print(f"Error saving parent set to Firestore: {e}")
+
+def delete_parent_set_from_firestore(parent_monster_id, grandpa_monster_id, grandma_monster_id):
+    try:
+        # 削除するParentSetを特定するクエリ
+        # 完全に一致するものを探すため、3つのID全てでフィルタリング
+        q = db.collection('parent_sets').where('parent_monster_id', '==', parent_monster_id)\
+                                        .where('grandpa_monster_id', '==', grandpa_monster_id)\
+                                        .where('grandma_monster_id', '==', grandma_monster_id).limit(1)
+        docs = q.get()
+        for doc in docs:
+            doc.reference.delete()
+            print(f"ParentSet {doc.id} (P:{parent_monster_id}, Gp:{grandpa_monster_id}, Gm:{grandma_monster_id}) deleted from Firestore.")
+            break # 見つかったら一つだけ削除して終了
+    except Exception as e:
+        print(f"Error deleting parent set from Firestore: {e}")
+
 
 @app.route('/')
 def home():
+    # Firestoreから最新データをロード
+    all_monsters, parent_sets = load_data_from_firestore()
+
+    # モンスターIDの最大値から次のIDを決定（ローカルファイル方式の名残）
+    # Firestoreは自動IDなので、ここでは使用しないが、以前のロジックに合わせた表示のため
+    # next_monster_id = max([m.monster_id for m in all_monsters]) + 1 if all_monsters else 1001
+
     return render_template(
         'home.html', 
-        all_monsters=my_monsters, 
+        all_monsters=all_monsters, 
         parent_sets=parent_sets,
         hiden_master_data_by_category=get_json_serializable_hiden_data(),
         green_hiden_names=green_hidens_list 
@@ -341,21 +425,13 @@ def home():
 
 @app.route('/register_monster', methods=['POST'])
 def register_monster():
-    global next_monster_id 
     name = request.form['monster_name']
     
-    # IDの自動割り当て
-    # 既存のIDをチェックして、最大のID+1を割り当てる (欠番は埋めないシンプルな方式)
-    existing_ids = {m.monster_id for m in my_monsters}
-    if existing_ids:
-        new_monster_id = max(existing_ids) + 1
-    else:
-        new_monster_id = 1001 
-
-    # IDが既に登録されていないかチェック (自動割り当てなので基本不要だが念のため)
-    if any(m.monster_id == new_monster_id for m in my_monsters):
-        print(f"警告: ID {new_monster_id} はすでに存在します。")
-        return redirect(url_for('home'))
+    # Firestoreでの自動ID割り当ては不要。monster_idはアプリ側で生成するか、FirestoreのDoc IDに任せる
+    # ここでは、既存の最大ID + 1を生成するローカルロジックを維持 (user_idが不要なため)
+    all_monsters, _ = load_data_from_firestore() # 最新のモンスターリストを取得
+    existing_ids = {m.monster_id for m in all_monsters}
+    new_monster_id = max(existing_ids) + 1 if existing_ids else 1001
 
     hidens_to_add = []
     categories = request.form.getlist('hiden_category')
@@ -373,10 +449,7 @@ def register_monster():
                 hidens_to_add.append(hiden_master_data[hiden_key])
 
     new_monster = Monster(name, new_monster_id, hidens_to_add)
-    my_monsters.append(new_monster)
-    
-    # データ保存
-    save_data(my_monsters, parent_sets)
+    save_monster_to_firestore(new_monster) # Firestoreに保存
 
     return redirect(url_for('home'))
 
@@ -384,18 +457,7 @@ def register_monster():
 def delete_monster():
     monster_id_to_delete = int(request.form['monster_id'])
 
-    global my_monsters, parent_sets
-    my_monsters = [m for m in my_monsters if m.monster_id != monster_id_to_delete]
-    
-    parent_sets = [
-        ps for ps in parent_sets 
-        if ps.parent.monster_id != monster_id_to_delete and 
-           ps.grandpa.monster_id != monster_id_to_delete and 
-           ps.grandma.monster_id != monster_id_to_delete
-    ]
-    
-    # データ保存
-    save_data(my_monsters, parent_sets)
+    delete_monster_from_firestore(monster_id_to_delete) # Firestoreから削除
 
     return redirect(url_for('home'))
 
@@ -405,36 +467,36 @@ def register_parent_set():
     grandpa_id = int(request.form['grandpa_monster'])
     grandma_id = int(request.form['grandma_monster'])
     
-    monster_map_by_id = {m.monster_id: m for m in my_monsters} 
-    
+    # Monsterオブジェクトの解決のために全モンスターをロード
+    all_monsters, _ = load_data_from_firestore()
+    monster_map_by_id = {m.monster_id: m for m in all_monsters}
+
     parent = monster_map_by_id.get(parent_id)
     grandpa = monster_map_by_id.get(grandpa_id)
     grandma = monster_map_by_id.get(grandma_id)
     
     if len(set([parent_id, grandpa_id, grandma_id])) != 3:
+        # 重複IDがあればリダイレクト
         return redirect(url_for('home'))
     
     if not all([parent, grandpa, grandma]):
+        # 存在しないモンスターIDが選択された場合はリダイレクト
         return redirect(url_for('home'))
 
-    new_parent_set = ParentSet(parent, grandpa, grandma)
-    parent_sets.append(new_parent_set)
-    
-    # データ保存
-    save_data(my_monsters, parent_sets)
+    # ParentSetオブジェクトをIDで初期化し、Monsterオブジェクトはマップで解決させる
+    new_parent_set = ParentSet(parent_id, grandpa_id, grandma_id, monster_map_by_id)
+    save_parent_set_to_firestore(new_parent_set) # Firestoreに保存
 
     return redirect(url_for('home'))
 
 @app.route('/delete_parent_set', methods=['POST'])
 def delete_parent_set():
-    try:
-        index_to_delete = int(request.form['parent_set_index'])
-        if 0 <= index_to_delete < len(parent_sets):
-            parent_sets.pop(index_to_delete)
-            # データ保存
-            save_data(my_monsters, parent_sets)
-    except (ValueError, IndexError):
-        pass
+    parent_id = int(request.form['parent_monster_id'])
+    grandpa_id = int(request.form['grandpa_monster_id'])
+    grandma_id = int(request.form['grandma_monster_id'])
+
+    delete_parent_set_from_firestore(parent_id, grandpa_id, grandma_id) # Firestoreから削除
+    
     return redirect(url_for('home'))
 
 @app.route('/run_simulation', methods=['POST'])
@@ -450,6 +512,9 @@ def run_simulation():
             except ValueError:
                 pass
 
+    # シミュレーション実行前に最新のデータをロード
+    all_monsters, parent_sets = load_data_from_firestore()
+
     if not parent_sets:
         return render_template('results.html', results=[], error_message="親セットが登録されていません。")
     
@@ -460,3 +525,6 @@ def run_simulation():
 
     return render_template('results.html', results=results, get_green_rank_up=get_green_rank_up)
 
+# Renderデプロイのため、開発用サーバー起動コードを削除
+# if __name__ == '__main__':
+#     app.run(debug=True)
