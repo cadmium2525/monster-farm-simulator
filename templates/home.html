@@ -184,7 +184,8 @@
         function addHidenForm() {
             hidenFormCounter++;
             const container = document.getElementById('hiden-container');
-            const newForm = document('div');
+            // ★修正箇所: document.createElement('div')に修正
+            const newForm = document.createElement('div'); 
             newForm.className = 'hiden-form';
             newForm.id = `hiden-form-${hidenFormCounter}`; // ユニークなIDを割り当てる
 
@@ -197,6 +198,7 @@
                 }
             }
 
+            // JavaScriptのテンプレートリテラル内で変数を埋め込む
             newForm.innerHTML = `
                 <select name="hiden_category" onchange="updateHidenNames(this)">
                     ${categoryOptions} 
