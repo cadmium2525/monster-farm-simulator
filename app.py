@@ -174,17 +174,65 @@ def add_hiden(category, name, rank):
 # WebテンプレートにJSONとして渡すための、秘伝マスターデータのシリアライズ可能なバージョンを生成
 def get_json_serializable_hiden_data():
     json_data = {}
-    # カテゴリの表示順を定義 (実際のゲーム順があればここを調整)
+    
+    # ★修正点1: 秘伝の種類の表示順序をここで定義
+    # 実際のゲーム内の表示順があれば、このリストを直接編集してください。
     ordered_categories = [
-        "青秘伝", "緑秘伝", "赤秘伝", "白秘伝", 
-        "ノラモン秘伝", "モン類秘伝", "六天将秘伝"
+        "青秘伝", 
+        "緑秘伝", 
+        "赤秘伝", 
+        "白秘伝", 
+        "ノラモン秘伝", 
+        "モン類秘伝", 
+        "六天将秘伝"
     ]
     
     for category in ordered_categories:
         if category in hiden_master_data_by_category:
             json_data[category] = {}
-            # 秘伝名の表示順も定義 (実際のゲーム順があればここを調整)
-            ordered_names = sorted(hiden_master_data_by_category[category].keys()) 
+            
+            # ★修正点2: 各秘伝の種類の中での秘伝名の表示順序を定義
+            # 特定のカテゴリでのみカスタム順序を適用できます。
+            # 例: 緑秘伝の表示順をゲームに合わせてカスタマイズ
+            if category == "緑秘伝":
+                # 緑秘伝のゲーム内での表示順をここに定義 (例示)
+                current_ordered_names = [
+                    "火山", "海岸", "雪山", "砂漠", "森林", # 地形系
+                    "零距離", "近距離", "中距離", "遠距離"  # 距離系
+                ]
+                # マスタにない名前が含まれている可能性を考慮し、存在する秘伝名のみをフィルタリング
+                available_names_in_category = hiden_master_data_by_category[category].keys()
+                ordered_names = [name for name in current_ordered_names if name in available_names_in_category]
+                # カスタム順序に含まれていない秘伝名があれば、アルファベット順で追加 (任意)
+                remaining_names = sorted(list(set(available_names_in_category) - set(ordered_names)))
+                ordered_names.extend(remaining_names)
+            elif category == "白秘伝":
+                # 白秘伝のゲーム内での表示順をここに定義 (例示)
+                current_ordered_names = [
+                    "四大大会制覇", "星統べる六天", "傷だらけのプライド", "モンスターダービー", "グレイテスト4", 
+                    "M-1グランプリ", "ウィナーズ", "ワールドモンスターズ", 
+                    "六英雄杯・紅", "六英雄杯・蒼", "六英雄杯・琥", "六英雄杯・翠", 
+                    "六英雄杯・煌", "六英雄杯・冥"
+                ]
+	    elif category == "赤秘伝":
+		current_ordered_names = [
+		  "零距離", "近距離", "中距離", "遠距離"]
+
+	    elif category == "ノラモン秘伝":
+		current_ordered_names = [
+		  "ニャー", "サンドゴーレム", "マグマハート", "ハム", "ムネンド", "グジラキング",
+		　"ディノ", "カムイ", "フェニックス", "プラント", "スピナー", "スナイプ", "シロゾー", 
+		]
+
+
+
+                available_names_in_category = hiden_master_data_by_category[category].keys()
+                ordered_names = [name for name in current_ordered_names if name in available_names_in_category]
+                remaining_names = sorted(list(set(available_names_in_category) - set(ordered_names)))
+                ordered_names.extend(remaining_names)
+            else:
+                # その他のカテゴリーは、これまで通りアルファベット順
+                ordered_names = sorted(hiden_master_data_by_category[category].keys()) 
             
             for name in ordered_names:
                 hiden_objects_from_master = hiden_master_data_by_category[category][name]
@@ -205,7 +253,8 @@ def get_json_serializable_hiden_data():
     return json_data
 
 # --- 各秘伝の定義 ---
-# ここで秘伝の定義順序を、ゲーム内の表示順に近づけることができます。
+# ここでの定義順序は、get_json_serializable_hiden_data()内のordered_categoriesやordered_namesで制御されます。
+# ここは、単に秘伝をシステムに登録する場所です。
 
 # 青秘伝
 blue_hidens = ["ライフ", "ちから", "かしこさ", "命中", "回避", "丈夫さ"]
@@ -213,7 +262,7 @@ for name in blue_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("青秘伝", name, rank)
 
-# 緑秘伝 (ゲーム内の表示順があればここに反映)
+# 緑秘伝 (秘伝リストの変数は、get_json_serializable_hiden_data()内で使用するために残しています)
 green_hidens_list = ["火山", "海岸", "雪山", "砂漠", "森林", "零距離", "近距離", "中距離", "遠距離"]
 for name in green_hidens_list:
     for rank in ["★★★", "★★☆", "★☆☆"]:
@@ -295,9 +344,6 @@ try:
         # JSON文字列を一時ファイルに書き込む
         # Firebase Admin SDKはファイルパスを期待するため、一時ファイルに書き出す
         # Renderでは/tmpディレクトリが書き込み可能
-        # ただし、render.comの推奨はJSONをBase64エンコードして渡す方法だが、
-        # ここではよりシンプルなアプローチとして直接JSON文字列をファイルに書き出す。
-        # 本番環境ではもっとセキュアな方法（例えばKMSなど）を検討すべき
         cred_path = "/tmp/serviceAccountKey.json"
         with open(cred_path, "w") as f:
             f.write(service_account_json)
@@ -432,6 +478,11 @@ def register_monster():
     all_monsters, _ = load_data_from_firestore() # 最新のモンスターリストを取得
     existing_ids = {m.monster_id for m in all_monsters}
     new_monster_id = max(existing_ids) + 1 if existing_ids else 1001
+
+    # IDが既に登録されていないかチェック (自動割り当てなので基本不要だが念のため)
+    if any(m.monster_id == new_monster_id for m in all_monsters):
+        print(f"警告: ID {new_monster_id} はすでに存在します。")
+        return redirect(url_for('home'))
 
     hidens_to_add = []
     categories = request.form.getlist('hiden_category')
