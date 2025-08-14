@@ -182,13 +182,14 @@ ORDERED_HIDEN_CATEGORIES = [
     "六天将秘伝"
 ]
 
-# ★追加: 各カテゴリーの秘伝名のカスタム表示順を定義する辞書
+# 各カテゴリーの秘伝名のカスタム表示順を定義する辞書
 # ここで各カテゴリーの秘伝名を、あなたがプルダウンで表示したい順序でリストとして定義してください。
 # 未定義のカテゴリーや秘伝名は、自動的にアルファベット順に追加されます。
 CUSTOM_HIDEN_NAMES_ORDER = {
     "青秘伝": ["ライフ", "ちから", "かしこさ", "命中", "回避", "丈夫さ"],
     "緑秘伝": ["火山", "海岸", "雪山", "砂漠", "森林", "零距離", "近距離", "中距離", "遠距離"],
     "赤秘伝": ["零距離", "近距離", "中距離", "遠距離"],
+    # ★変更箇所: 白秘伝の名称を新しいものに更新
     "白秘伝": ["四大大会制覇", "星統べる六天", "モンスターダービー", "グレイテスト4", 
                "M-1グランプリ", "ウィナーズ", "ワールドモンスターズ", 
                "六英雄杯・紅", "六英雄杯・蒼", "六英雄杯・琥", "六英雄杯・翠", 
@@ -197,7 +198,7 @@ CUSTOM_HIDEN_NAMES_ORDER = {
                    "グジラキング", "ディノ", "カムイ", "フェニックス", "プラント", 
                    "スピナー", "スナイプ", "シロゾー"],
     "モン類秘伝": ["無機", "創造", "幻霊", "魔族", "獣", "怪物"],
-    "六天将秘伝": ["六天将"] # 六天将は「六天将」秘伝のみなので、リスト形式で定義
+    "六天将秘伝": ["六天将"]
 }
 
 
@@ -207,29 +208,33 @@ def get_json_serializable_hiden_data():
     
     for category in ORDERED_HIDEN_CATEGORIES:
         if category in hiden_master_data_by_category:
-            json_data[category] = {}
+            # カテゴリーごとに、秘伝の詳細データと順序付き秘伝名を格納する辞書を作成
+            json_data[category] = {
+                "details": {}, # 秘伝の詳細 (名前とランクなど)
+                "ordered_names": [] # このカテゴリーの秘伝名の順序
+            }
             
             # 実際にマスターデータに存在する秘伝名を取得
             available_names_in_category = list(hiden_master_data_by_category[category].keys())
             
             ordered_names = [] # 最終的な順序付き秘伝名リスト
             
-            # ★修正点: CUSTOM_HIDEN_NAMES_ORDER を参照して順序を決定
             if category in CUSTOM_HIDEN_NAMES_ORDER:
                 custom_order_template = CUSTOM_HIDEN_NAMES_ORDER[category]
-                # カスタム順序の秘伝名を優先して追加 (マスターに存在する秘伝名のみ)
                 for name_in_order in custom_order_template:
                     if name_in_order in available_names_in_category:
                         ordered_names.append(name_in_order)
                 
-                # カスタム順序に含まれていない、マスタに存在する秘伝名があれば、アルファベット順で追加
                 remaining_names = sorted(list(set(available_names_in_category) - set(ordered_names)))
                 ordered_names.extend(remaining_names)
             else:
-                # CUSTOM_HIDEN_NAMES_ORDERに定義されていないカテゴリーはアルファベット順
                 ordered_names = sorted(available_names_in_category)
             
-            for name in ordered_names:
+            # 秘伝の順序をjson_dataに格納
+            json_data[category]["ordered_names"] = ordered_names
+            
+            # 各秘伝の詳細をjson_dataに格納
+            for name in ordered_names: # 順序付けられた名前のリストを使用
                 hiden_objects_from_master = hiden_master_data_by_category[category][name]
                 
                 if not isinstance(hiden_objects_from_master, list):
@@ -241,54 +246,51 @@ def get_json_serializable_hiden_data():
                 else:
                     hiden_objects = hiden_objects_from_master 
 
-                json_data[category][name] = [
+                json_data[category]["details"][name] = [ # "details"キーの下に格納
                     {"category": h.category, "name": h.name, "rank": h.rank}
                     for h in hiden_objects
                 ]
     return json_data
 
 # --- 各秘伝の定義 ---
-# ここは秘伝データをシステムに登録する箇所です。
-# 表示順序は上記の get_json_serializable_hiden_data() と CUSTOM_HIDEN_NAMES_ORDER で制御されます。
-
-# 青秘伝
+# ★変更箇所: 白秘伝の名称を新しいものに更新
 blue_hidens = CUSTOM_HIDEN_NAMES_ORDER["青秘伝"]
 for name in blue_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("青秘伝", name, rank)
 
-# 緑秘伝
-green_hidens_list = CUSTOM_HIDEN_NAMES_ORDER["緑秘伝"] # home.htmlに渡すために変数名を維持
+green_hidens_list = CUSTOM_HIDEN_NAMES_ORDER["緑秘伝"] 
 for name in green_hidens_list:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("緑秘伝", name, rank)
 
-# 赤秘伝
 red_hidens = CUSTOM_HIDEN_NAMES_ORDER["赤秘伝"]
 for name in red_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("赤秘伝", name, rank)
 
-white_hidens = CUSTOM_HIDEN_NAMES_ORDER["白秘伝"]
+white_hidens = [
+    "四大大会制覇", "星統べる六天", "モンスターダービー", "グレイテスト4", 
+    "M-1グランプリ", "ウィナーズ", "ワールドモンスターズ", 
+    "六英雄杯・紅", "六英雄杯・蒼", "六英雄杯・琥", "六英雄杯・翠", 
+    "六英雄杯・煌", "六英雄杯・冥", "傷だらけのプライド"
+]
 for name in white_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("白秘伝", name, rank)
 
-# ノラモン秘伝
 nora_hidens = CUSTOM_HIDEN_NAMES_ORDER["ノラモン秘伝"]
 for name in nora_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("ノラモン秘伝", name, rank)
 
-# モン類秘伝
 monrui_hidens = CUSTOM_HIDEN_NAMES_ORDER["モン類秘伝"]
 for name in monrui_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("モン類秘伝", name, rank)
 
-# 六天将秘伝
 six_ten_hidens = CUSTOM_HIDEN_NAMES_ORDER["六天将秘伝"]
-for name in six_ten_hidens: # 六天将秘伝は"六天将"のみ
+for name in six_ten_hidens: 
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("六天将秘伝", name, rank)
 
@@ -310,12 +312,11 @@ def search_combinations(target_green_hidens, parent_sets_to_choose):
     found_combinations = []
     all_parent_set_pairs = itertools.combinations(parent_sets_to_choose, 2)
     for father_set, mother_set in all_parent_set_pairs:
-        # Monsterオブジェクトが有効でない親セットはスキップ
         if not all([father_set.parent, father_set.grandpa, father_set.grandma,
                     mother_set.parent, mother_set.grandpa, mother_set.grandma]):
             continue
 
-        if father_set.parent.monster_id == mother_set.parent.monster_id: # 親が同じIDでないことを確認
+        if father_set.parent.monster_id == mother_set.parent.monster_id: 
             continue
         current_combination = Combination(father_set, mother_set)
         green_stars, _ = current_combination.calculate_green_and_red_stars()

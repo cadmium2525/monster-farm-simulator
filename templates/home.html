@@ -42,7 +42,6 @@
             <div class="hiden-form" id="hiden-form-0">
                 <select name="hiden_category" onchange="updateHidenNames(this)">
                     <option value="">秘伝の種類</option>
-                    {# ★修正点: app.pyから渡されたordered_hiden_categoriesを使用 #}
                     {% for category in ordered_hiden_categories %}
                         <option value="{{ category }}">{{ category }}</option>
                     {% endfor %}
@@ -159,8 +158,19 @@
     </form>
     
     <script>
-        const hidenMasterData = JSON.parse('{{ hiden_master_data_by_category | tojson | safe }}');
-        // ★修正点: Pythonから渡されたカテゴリー順序をJavaScriptで受け取る
+        // hidenMasterDataの構造が変更されたため、詳細と順序を適切に扱う
+        const hidenMasterDataRaw = JSON.parse('{{ hiden_master_data_by_category | tojson | safe }}');
+        const hidenMasterData = {}; // 秘伝の詳細データを格納する
+        const hidenOrderData = {}; // 秘伝の順序データを格納する
+        
+        // Pythonから渡されたデータをJavaScriptで使いやすい形に整理
+        for (const category in hidenMasterDataRaw) {
+            if (hidenMasterDataRaw.hasOwnProperty(category)) {
+                hidenMasterData[category] = hidenMasterDataRaw[category].details;
+                hidenOrderData[category] = hidenMasterDataRaw[category].ordered_names;
+            }
+        }
+
         const orderedHidenCategories = JSON.parse('{{ ordered_hiden_categories | tojson | safe }}');
         let hidenFormCounter = 0; // モンスター秘伝フォームにユニークなIDを割り当てるカウンター
 
@@ -183,18 +193,10 @@
             hidenNameSelect.innerHTML = '<option value="">秘伝の名前</option>'; // 一旦クリア
             
             if (selectedCategory && hidenMasterData[selectedCategory]) {
-                const hidenNames = Object.keys(hidenMasterData[selectedCategory]); 
+                // ★修正箇所: hidenOrderDataから順序付きの秘伝名リストを取得
+                const orderedNames = hidenOrderData[selectedCategory] || Object.keys(hidenMasterData[selectedCategory]).sort(); 
                 
-                // app.pyで定義したカスタム順序があれば、それを適用
-                let sortedNames = [];
-                // orderedHidenNamesはget_json_serializable_hiden_data()内部で定義されているため、
-                // ここで直接JavaScriptとしてアクセスすることはできない。
-                // そのため、JavaScript側でカスタム順序を必要とする場合は、
-                // app.pyから各カテゴリーのカスタム順序リストも別途渡す必要があります。
-                // 現状は、hidenMasterDataから取得した秘伝名をアルファベット順にソートします。
-                sortedNames = hidenNames.sort(); // アルファベット順にソート
-                
-                sortedNames.forEach(name => {
+                orderedNames.forEach(name => {
                     const option = document.createElement('option');
                     option.value = name;
                     option.textContent = name;
@@ -213,7 +215,6 @@
 
             // 秘伝の種類プルダウンのオプションを動的に生成
             let categoryOptionsHtml = '<option value="">秘伝の種類</option>';
-            // ★修正点: orderedHidenCategories を使って順序を保証
             orderedHidenCategories.forEach(category => {
                 categoryOptionsHtml += `<option value="${category}">${category}</option>`;
             });
