@@ -175,8 +175,6 @@ def add_hiden(category, name, rank):
 def get_json_serializable_hiden_data():
     json_data = {}
     
-    # ★修正点1: 秘伝の種類の表示順序をここで定義
-    # 実際のゲーム内の表示順があれば、このリストを直接編集してください。
     ordered_categories = [
         "青秘伝", 
         "緑秘伝", 
@@ -191,50 +189,46 @@ def get_json_serializable_hiden_data():
         if category in hiden_master_data_by_category:
             json_data[category] = {}
             
-            # ★修正点2: 各秘伝の種類の中での秘伝名の表示順序を定義
-            # 特定のカテゴリでのみカスタム順序を適用できます。
-            # 例: 緑秘伝の表示順をゲームに合わせてカスタマイズ
+            # ★修正点: 各秘伝の種類の中での秘伝名の表示順序を定義するロジックをより堅牢に
+            # まず、実際にマスターデータに存在する秘伝名を取得
+            available_names_in_category = list(hiden_master_data_by_category[category].keys())
+            
+            ordered_names = [] # 最終的な順序付き秘伝名リスト
+            
             if category == "緑秘伝":
-                # 緑秘伝のゲーム内での表示順をここに定義 (例示)
-                current_ordered_names = [
+                custom_order_template = [
                     "火山", "海岸", "雪山", "砂漠", "森林", # 地形系
                     "零距離", "近距離", "中距離", "遠距離"  # 距離系
                 ]
-                # マスタにない名前が含まれている可能性を考慮し、存在する秘伝名のみをフィルタリング
-                available_names_in_category = hiden_master_data_by_category[category].keys()
-                ordered_names = [name for name in current_ordered_names if name in available_names_in_category]
-                # カスタム順序に含まれていない秘伝名があれば、アルファベット順で追加 (任意)
+                # カスタム順序の秘伝名を優先して追加 (マスターに存在する秘伝名のみ)
+                for name_in_order in custom_order_template:
+                    if name_in_order in available_names_in_category:
+                        ordered_names.append(name_in_order)
+                
+                # カスタム順序に含まれていない、マスタに存在する秘伝名があれば、アルファベット順で追加
                 remaining_names = sorted(list(set(available_names_in_category) - set(ordered_names)))
                 ordered_names.extend(remaining_names)
+                
             elif category == "白秘伝":
-                # 白秘伝のゲーム内での表示順をここに定義 (例示)
-                current_ordered_names = [
-                    "四大大会制覇", "星統べる六天", "傷だらけのプライド", "モンスターダービー", "グレイテスト4", 
+                custom_order_template = [
+                    "四大大会制覇", "星統べる六天", "モンスターダービー", "グレイテスト4", 
                     "M-1グランプリ", "ウィナーズ", "ワールドモンスターズ", 
-                    "六英雄杯・紅", "六英雄杯・蒼", "六英雄杯・琥", "六英雄杯・翠", 
-                    "六英雄杯・煌", "六英雄杯・冥"
+                    "英雄秘伝(赤)", "英雄秘伝(青)", "英雄秘伝(黄)", "英雄秘伝(緑)", 
+                    "英雄秘伝(白)", "英雄秘伝(黒)", "傷だらけのプライド"
                 ]
-            elif category == "赤秘伝":
-                current_ordered_names = [
-                    "零距離", "近距離", "中距離", "遠距離"]
-
-            elif category == "ノラモン秘伝":
-                current_ordered_names = [
-                    "ニャー", "サンドゴーレム", "マグマハート", "ハム", "ムネンド", "グジラキング",
-                    "ディノ", "カムイ", "フェニックス", "プラント", "スピナー", "スナイプ", "シロゾー", 
-                ]
-
-
-
-                available_names_in_category = hiden_master_data_by_category[category].keys()
-                ordered_names = [name for name in current_ordered_names if name in available_names_in_category]
+                for name_in_order in custom_order_template:
+                    if name_in_order in available_names_in_category:
+                        ordered_names.append(name_in_order)
+                
                 remaining_names = sorted(list(set(available_names_in_category) - set(ordered_names)))
                 ordered_names.extend(remaining_names)
-            else:
-                # その他のカテゴリーは、これまで通りアルファベット順
-                ordered_names = sorted(hiden_master_data_by_category[category].keys()) 
+            
+            # その他のカテゴリーは、これまで通りアルファベット順 (ordered_namesが空の場合)
+            if not ordered_names: # カスタム順序が適用されなかった場合
+                ordered_names = sorted(available_names_in_category)
             
             for name in ordered_names:
+                # ここで 'name' が 'available_names_in_category' から来ているので、KeyErrorは発生しないはず
                 hiden_objects_from_master = hiden_master_data_by_category[category][name]
                 
                 if not isinstance(hiden_objects_from_master, list):
@@ -274,8 +268,7 @@ for name in red_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("赤秘伝", name, rank)
 
-white_hidens = ["四大大会制覇", "星統べる六天", "モンスターダービー", "グレイテスト4", "M-1グランプリ", "ウィナーズ", "ワールドモンスターズ", "六英雄杯・紅", "六英雄杯・蒼", "六英雄杯・琥", "六英雄杯・翠", 
-                    "六英雄杯・煌", "六英雄杯・冥", "傷だらけのプライド"]
+white_hidens = ["四大大会制覇", "星統べる六天", "モンスターダービー", "グレイテスト4", "M-1グランプリ", "ウィナーズ", "ワールドモンスターズ", "英雄秘伝(赤)", "英雄秘伝(青)", "英雄秘伝(黄)", "英雄秘伝(緑)", "英雄秘伝(白)", "英雄秘伝(黒)", "傷だらけのプライド"]
 for name in white_hidens:
     for rank in ["★★★", "★★☆", "★☆☆"]:
         add_hiden("白秘伝", name, rank)
@@ -345,6 +338,9 @@ try:
         # JSON文字列を一時ファイルに書き込む
         # Firebase Admin SDKはファイルパスを期待するため、一時ファイルに書き出す
         # Renderでは/tmpディレクトリが書き込み可能
+        # ただし、render.comの推奨はJSONをBase64エンコードして渡す方法だが、
+        # ここではよりシンプルなアプローチとして直接JSON文字列をファイルに書き出す。
+        # 本番環境ではもっとセキュアな方法（例えばKMSなど）を検討すべき
         cred_path = "/tmp/serviceAccountKey.json"
         with open(cred_path, "w") as f:
             f.write(service_account_json)
