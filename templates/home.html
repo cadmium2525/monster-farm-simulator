@@ -42,7 +42,8 @@
             <div class="hiden-form" id="hiden-form-0">
                 <select name="hiden_category" onchange="updateHidenNames(this)">
                     <option value="">秘伝の種類</option>
-                    {% for category in hiden_master_data_by_category.keys() %}
+                    {# ★修正点: app.pyから渡されたordered_hiden_categoriesを使用 #}
+                    {% for category in ordered_hiden_categories %}
                         <option value="{{ category }}">{{ category }}</option>
                     {% endfor %}
                 </select>
@@ -159,7 +160,19 @@
     
     <script>
         const hidenMasterData = JSON.parse('{{ hiden_master_data_by_category | tojson | safe }}');
+        // ★修正点: Pythonから渡されたカテゴリー順序をJavaScriptで受け取る
+        const orderedHidenCategories = JSON.parse('{{ ordered_hiden_categories | tojson | safe }}');
         let hidenFormCounter = 0; // モンスター秘伝フォームにユニークなIDを割り当てるカウンター
+
+        // 初期表示の秘伝カテゴリープルダウンのオプションを、順序付けられたリストで再設定
+        const initialHidenCategorySelect = document.querySelector('#hiden-form-0 select[name="hiden_category"]');
+        if (initialHidenCategorySelect) {
+            let initialCategoryOptionsHtml = '<option value="">秘伝の種類</option>';
+            orderedHidenCategories.forEach(category => {
+                initialCategoryOptionsHtml += `<option value="${category}">${category}</option>`;
+            });
+            initialHidenCategorySelect.innerHTML = initialCategoryOptionsHtml;
+        }
 
         // モンスター秘伝フォームの秘伝の名前プルダウンを更新する関数
         function updateHidenNames(categorySelect) {
@@ -170,8 +183,18 @@
             hidenNameSelect.innerHTML = '<option value="">秘伝の名前</option>'; // 一旦クリア
             
             if (selectedCategory && hidenMasterData[selectedCategory]) {
-                const hidenNames = Object.keys(hidenMasterData[selectedCategory]);
-                hidenNames.forEach(name => {
+                const hidenNames = Object.keys(hidenMasterData[selectedCategory]); 
+                
+                // app.pyで定義したカスタム順序があれば、それを適用
+                let sortedNames = [];
+                // orderedHidenNamesはget_json_serializable_hiden_data()内部で定義されているため、
+                // ここで直接JavaScriptとしてアクセスすることはできない。
+                // そのため、JavaScript側でカスタム順序を必要とする場合は、
+                // app.pyから各カテゴリーのカスタム順序リストも別途渡す必要があります。
+                // 現状は、hidenMasterDataから取得した秘伝名をアルファベット順にソートします。
+                sortedNames = hidenNames.sort(); // アルファベット順にソート
+                
+                sortedNames.forEach(name => {
                     const option = document.createElement('option');
                     option.value = name;
                     option.textContent = name;
@@ -184,24 +207,20 @@
         function addHidenForm() {
             hidenFormCounter++;
             const container = document.getElementById('hiden-container');
-            // ★修正箇所: document.createElement('div')に修正
             const newForm = document.createElement('div'); 
             newForm.className = 'hiden-form';
             newForm.id = `hiden-form-${hidenFormCounter}`; // ユニークなIDを割り当てる
 
             // 秘伝の種類プルダウンのオプションを動的に生成
-            let categoryOptions = '<option value="">秘伝の種類</option>';
-            // hidenMasterData のキー（カテゴリー名）を JavaScript でループ
-            for (const category in hidenMasterData) {
-                if (hidenMasterData.hasOwnProperty(category)) {
-                    categoryOptions += `<option value="${category}">${category}</option>`;
-                }
-            }
+            let categoryOptionsHtml = '<option value="">秘伝の種類</option>';
+            // ★修正点: orderedHidenCategories を使って順序を保証
+            orderedHidenCategories.forEach(category => {
+                categoryOptionsHtml += `<option value="${category}">${category}</option>`;
+            });
 
-            // JavaScriptのテンプレートリテラル内で変数を埋め込む
             newForm.innerHTML = `
                 <select name="hiden_category" onchange="updateHidenNames(this)">
-                    ${categoryOptions} 
+                    ${categoryOptionsHtml} 
                 </select>
                 <select name="hiden_name">
                     <option value="">秘伝の名前</option>
