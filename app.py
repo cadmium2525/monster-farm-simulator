@@ -25,8 +25,8 @@ except FileNotFoundError:
     print("エラー: CSVファイルが見つかりません。最初に生成スクリプトを実行してください。")
     exit()
 
-# C値の上位5%を事前に抽出
-C_AFFINITY_THRESHOLD = 0.95
+# C値の上位10%を事前に抽出
+C_AFFINITY_THRESHOLD = 0.90
 top_c_threshold = part_c_df['c_affinity'].quantile(C_AFFINITY_THRESHOLD)
 part_c_df = part_c_df[part_c_df['c_affinity'] >= top_c_threshold]
 
