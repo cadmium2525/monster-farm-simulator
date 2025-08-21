@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>相性探索ツール</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 900px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+        .input-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #fafafa; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        select, input[type="number"], input[type="text"] { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 12px; cursor: pointer; font-size: 14px; width: 100%; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .results-container { margin-top: 30px; }
+        h2 { border-bottom: 2px solid #007bff; padding-bottom: 5px; color: #007bff; }
+        .results-section { margin-bottom: 30px; }
+        .results-summary table, .detailed-results table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        .results-summary th, .results-summary td, .detailed-results th, .detailed-results td { border: 1px solid #ccc; padding: 12px; text-align: left; }
+        .results-summary th, .detailed-results th { background-color: #f2f2f2; font-weight: bold; }
+        .results-summary tr:hover { background-color: #f9f9f9; cursor: pointer; }
+        .fixed-monster-group { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+        .fixed-monster-group > div { flex: 1 1 45%; }
+        .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; display: none; }
+        .loading-message { text-align: center; margin-top: 20px; display: none; }
+        
+        /* レスポンシブデザイン */
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            .fixed-monster-group { flex-direction: column; }
+            .fixed-monster-group > div { flex: none; width: 100%; }
+            .results-summary table, .detailed-results table { font-size: 12px; }
+        }
+        
+        @media (max-width: 480px) {
+            .results-summary th, .results-summary td, .detailed-results th, .detailed-results td { padding: 8px; }
+            .input-with-buttons button { padding: 6px 10px; }
+        }
+        
+        /* 元のHTMLのスタイルを復元 */
+        .best-combination-result {
+            padding: 20px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.2em;
+        }
+        .best-combination-result h3 {
+            margin-top: 0;
+            color: #0056b3;
+        }
+        .best-combination-result p {
+            margin: 5px 0;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #d9534f;
+            font-size: 1.5em;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        .input-with-buttons {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .input-with-buttons input {
+            flex-grow: 1;
+        }
+        .input-with-buttons button {
+            padding: 8px 12px;
+            margin: 0;
+        }
+        .target-affinity-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .target-affinity-container select,
+        .target-affinity-container input {
+            width: auto;
+            flex-grow: 1;
+        }
+
+        /* モンスター選択ポップアップのスタイル */
+        .monster-selector-modal {
+            display: none;
+            position: fixed;
+            z-index: 10;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.8);
+            padding-top: 50px;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #000;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .monster-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .monster-icon {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            border: 2px solid transparent;
+        }
+        .monster-icon:hover {
+            transform: scale(1.1);
+        }
+        .monster-selector-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .monster-selector-container input {
+            flex-grow: 1;
+        }
+        .select-button {
+            width: auto;
+            padding: 10px 15px;
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        .monster-icon.selected {
+            border: 2px solid #007bff;
+            box-shadow: 0 0 5px #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>相性探索ツール</h1>
+        <p>探索するモンスターの条件を設定し、相性の良い組み合わせを探します。</p>
+
+        <div class="input-section">
+            <h2>探索条件</h2>
+            <form id="exploration-form">
+                <div class="input-group">
+                    <label for="common_secret_iii">共通秘伝Ⅲの数:</label>
+                    <div class="input-with-buttons">
+                        <input type="number" id="common_secret_iii" name="common_secret_iii" value="0" min="0">
+                        <button type="button" onclick="incrementSecret('common_secret_iii', -1)">-1</button>
+                        <button type="button" onclick="incrementSecret('common_secret_iii', 1)">+1</button>
+                        <button type="button" onclick="incrementSecret('common_secret_iii', 5)">+5</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="common_secret_ii">共通秘伝Ⅱの数:</label>
+                    <div class="input-with-buttons">
+                        <input type="number" id="common_secret_ii" name="common_secret_ii" value="0" min="0">
+                        <button type="button" onclick="incrementSecret('common_secret_ii', -1)">-1</button>
+                        <button type="button" onclick="incrementSecret('common_secret_ii', 1)">+1</button>
+                        <button type="button" onclick="incrementSecret('common_secret_ii', 5)">+5</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="limit">表示件数（上位）:</label>
+                    <input type="number" id="limit" name="limit" value="50" min="1">
+                </div>
+                <div class="input-group">
+                    <label>目標相性値:</label>
+                    <div class="target-affinity-container">
+                        <select id="target_symbol" name="target_symbol">
+                            <option value="☆">☆</option>
+                            <option value="◎" selected>◎</option>
+                            <option value="○">○</option>
+                            <option value="△">△</option>
+                            <option value="×">×</option>
+                        </select>
+                        または
+                        <input type="number" id="target_affinity_value" name="target_affinity_value" placeholder="数値を直接入力" min="0">
+                    </div>
+                </div>
+                <hr>
+                <h2>探索から除外するモンスター</h2>
+                <div id="excluded-monsters-container" class="monster-grid">
+                    </div>
+                <hr>
+                <h2>固定するモンスター（空欄は探索対象）</h2>
+                <p>探索対象として空欄のままにすることもできます。</p>
+                <div class="input-group">
+                    <label for="child">子:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="child" name="child" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('child')">選択</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="parent1">親①:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="parent1" name="parent1" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('parent1')">選択</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="grandpa1">親①の祖父:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="grandpa1" name="grandpa1" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('grandpa1')">選択</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="grandma1">親①の祖母:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="grandma1" name="grandma1" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('grandma1')">選択</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="parent2">親②:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="parent2" name="parent2" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('parent2')">選択</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="grandpa2">親②の祖父:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="grandpa2" name="grandpa2" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('grandpa2')">選択</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="grandma2">親②の祖母:</label>
+                    <div class="monster-selector-container">
+                        <input type="text" id="grandma2" name="grandma2" value="" readonly placeholder="探索対象">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('grandma2')">選択</button>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button type="submit" id="start-button">探索開始</button>
+                    <button type="button" id="cancel-button" style="display: none;">探索中止</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="results-container" class="results-container">
+            <h2>探索結果</h2>
+            <div id="loading-message" style="display: none; text-align: center;">探索中です...</div>
+            
+            <div id="best-combination-section" class="results-section" style="display: none;">
+                <h3>最高の相性値を持つ組み合わせ</h3>
+                <div id="best-combination-result" class="best-combination-result">
+                    <p id="best-combination-info">...</p>
+                    <p>最終相性値: <span id="best-affinity" class="highlight"></span></p>
+                </div>
+            </div>
+
+            <div id="parent-summary-section" class="results-section" style="display: none;">
+                <p id="parent-summary-count"></p>
+                <p>以下の候補をクリックすると、子との組み合わせ詳細が表示されます。</p>
+                <table id="parent-summary-table">
+                    <thead>
+                        <tr>
+                            <th>候補モンスター</th>
+                            <th>目標達成組み合わせ数</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="child-details-section" class="results-section" style="display: none;">
+                <h3>選択された組み合わせの詳細</h3>
+                <p>親①：<span id="display-parent1"></span> / 親②：<span id="display-parent2"></span></p>
+                <table id="child-details-table">
+                    <thead>
+                        <tr>
+                            <th>子モンスター</th>
+                            <th>最終相性値</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div id="monster-selector-modal" class="monster-selector-modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeMonsterSelector()">&times;</span>
+            <h4>モンスターを選択</h4>
+            <div class="monster-selector-container">
+                <input type="text" id="monster-search" placeholder="検索...">
+                <button type="button" onclick="selectMonster('')" class="select-button">クリア</button>
+            </div>
+            <div id="monster-grid" class="monster-grid">
+                </div>
+        </div>
+    </div>
+
+<script>
+    const form = document.getElementById('exploration-form');
+    const startButton = document.getElementById('start-button');
+    const cancelButton = document.getElementById('cancel-button');
+    const loadingMessage = document.getElementById('loading-message');
+    const parentSummarySection = document.getElementById('parent-summary-section');
+    const parentSummaryTableBody = document.querySelector('#parent-summary-table tbody');
+    const childDetailsSection = document.getElementById('child-details-section');
+    const bestCombinationSection = document.getElementById('best-combination-section');
+    const bestCombinationInfo = document.getElementById('best-combination-info');
+    const bestAffinitySpan = document.getElementById('best-affinity');
+    const fixedSlots = ['child', 'parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2'];
+    const bloodlines = JSON.parse('{{ bloodlines | tojson }}');
+    const monsterSelectorModal = document.getElementById('monster-selector-modal');
+    const monsterGrid = document.getElementById('monster-grid');
+    const monsterSearch = document.getElementById('monster-search');
+    const excludedMonstersContainer = document.getElementById('excluded-monsters-container');
+
+    const staticImagesPath = "{{ url_for('static', filename='images/') }}";
+    const excludedMonsters = new Set(); // 除外モンスターを管理するSet
+
+    let currentDetailRow = null;
+    let currentRequestId = null;
+    let currentSelectionSlot = null; // 現在選択中の入力欄を追跡
+
+    // 初期表示時に除外モンスターアイコンを生成
+    generateExcludedIcons();
+
+    function toggleForm(disabled) {
+        const inputs = form.querySelectorAll('input, select, button:not(#cancel-button)');
+        inputs.forEach(input => {
+            input.disabled = disabled;
+        });
+        startButton.style.display = disabled ? 'none' : 'inline-block';
+        cancelButton.style.display = disabled ? 'inline-block' : 'none';
+        loadingMessage.style.display = disabled ? 'block' : 'none';
+    }
+
+    function incrementSecret(inputId, value) {
+        const input = document.getElementById(inputId);
+        const currentValue = parseInt(input.value) || 0;
+        const newValue = currentValue + value;
+        input.value = Math.max(0, newValue);
+    }
+    
+    function openMonsterSelector(slotId) {
+        currentSelectionSlot = slotId;
+        monsterSelectorModal.style.display = "block";
+        generateMonsterIcons(bloodlines);
+    }
+    
+    function closeMonsterSelector() {
+        monsterSelectorModal.style.display = "none";
+        monsterSearch.value = "";
+    }
+
+    function generateMonsterIcons(monsterList) {
+        monsterGrid.innerHTML = '';
+        monsterList.forEach(monster => {
+            const img = document.createElement('img');
+            const imageUrl = staticImagesPath + monster + '.png';
+            img.src = imageUrl;
+            img.alt = monster;
+            img.title = imageUrl; // デバッグ用にパスをツールチップとして表示
+            img.classList.add('monster-icon');
+            img.onclick = () => selectMonster(monster);
+            monsterGrid.appendChild(img);
+        });
+    }
+
+    function selectMonster(monsterName) {
+        if (currentSelectionSlot) {
+            document.getElementById(currentSelectionSlot).value = monsterName;
+        }
+        closeMonsterSelector();
+    }
+    
+    monsterSearch.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        const filteredMonsters = bloodlines.filter(monster => monster.toLowerCase().includes(query));
+        generateMonsterIcons(filteredMonsters);
+    });
+
+    // 新しい関数: 除外モンスターアイコンを生成
+    function generateExcludedIcons() {
+        excludedMonstersContainer.innerHTML = '';
+        bloodlines.forEach(monster => {
+            const img = document.createElement('img');
+            const imageUrl = staticImagesPath + monster + '.png';
+            img.src = imageUrl;
+            img.alt = monster;
+            img.classList.add('monster-icon');
+            if (excludedMonsters.has(monster)) {
+                img.classList.add('selected');
+            }
+            img.onclick = () => toggleExcludedMonster(monster, img);
+            excludedMonstersContainer.appendChild(img);
+        });
+    }
+
+    // 新しい関数: 除外モンスターの選択状態を切り替える
+    function toggleExcludedMonster(monsterName, element) {
+        if (excludedMonsters.has(monsterName)) {
+            excludedMonsters.delete(monsterName);
+            element.classList.remove('selected');
+        } else {
+            excludedMonsters.add(monsterName);
+            element.classList.add('selected');
+        }
+    }
+
+    // getExcludedMonsters関数を修正
+    function getExcludedMonsters() {
+        return Array.from(excludedMonsters);
+    }
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        toggleForm(true);
+
+        parentSummarySection.style.display = 'none';
+        bestCombinationSection.style.display = 'none';
+        childDetailsSection.style.display = 'none';
+        if (currentDetailRow) {
+            currentDetailRow.remove();
+            currentDetailRow = null;
+        }
+
+        currentRequestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        
+        const data = {};
+        fixedSlots.forEach(slot => {
+            data[slot] = form[slot].value || null;
+        });
+        data.common_secret_iii = form.common_secret_iii.value;
+        data.common_secret_ii = form.common_secret_ii.value;
+        data.target_symbol = form.target_symbol.value;
+        data.target_affinity_value = form.target_affinity_value.value;
+        data.limit = form.limit.value;
+        data.excluded_monsters = getExcludedMonsters();
+        data.request_id = currentRequestId;
+        
+        const exploringSlots = fixedSlots.filter(slot => form[slot].value === '' && slot !== 'child');
+        
+        if (form.child.value === '' && exploringSlots.length >= 4) {
+            alert('空きスロットが4つ以上の為、高速モードで探索します。正確性は落ちますが、ご理解ください。');
+        }
+
+        fetch('/explore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error); });
+            }
+            return response.json();
+        })
+        .then(results => {
+            toggleForm(false);
+            
+            // サーバーのレスポンス形式をチェック
+            // 詳細情報が直接返された場合
+            if (results.length > 0 && results[0].hasOwnProperty('child_bloodline')) {
+                displayChildDetails(results, data.parent1, data.parent2);
+            }
+            // 最良の組み合わせが返された場合
+            else if (data.child) {
+                displayBestCombination(results);
+            } 
+            // サマリーが返された場合
+            else {
+                displayParentSummary(results, exploringSlots);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            toggleForm(false);
+            if (error.message !== '探索が中止されました') {
+                alert(error.message || "探索中にエラーが発生しました。");
+            }
+        });
+    });
+
+    cancelButton.addEventListener('click', function() {
+        if (!currentRequestId) return;
+        
+        console.log("探索中止ボタンがクリックされました。");
+        fetch('/cancel_exploration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_id: currentRequestId }),
+        })
+        .then(() => {
+            toggleForm(false);
+            alert("探索が中止されました。");
+        })
+        .catch(error => {
+            console.error('キャンセルリクエスト送信エラー:', error);
+            toggleForm(false);
+            alert("キャンセルリクエストの送信中にエラーが発生しました。");
+        });
+    });
+
+    function displayBestCombination(results) {
+        bestCombinationSection.style.display = 'block';
+        if (results.length === 0) {
+            bestCombinationInfo.textContent = "条件に合う最高の組み合わせは見つかりませんでした。";
+            bestAffinitySpan.textContent = "-";
+        } else {
+            const result = results[0];
+              const sortedSlots = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2'];
+              const displayNames = sortedSlots.filter(slot => result.combination.hasOwnProperty(slot)).map(slot => {
+                  const name = result.combination[slot];
+                  const displayName = {
+                      'parent1': '親①', 'grandpa1': '親①祖父', 'grandma1': '親①祖母',
+                      'parent2': '親②', 'grandpa2': '親②祖父', 'grandma2': '親②祖母'
+                  }[slot];
+                  return `${displayName}: ${name}`;
+              }).join(' / ');
+            bestCombinationInfo.textContent = `子: ${form.child.value} / ${displayNames}`;
+            bestAffinitySpan.textContent = result.best_affinity.toFixed(2);
+        }
+    }
+
+    function displayParentSummary(results, exploringSlots) {
+        parentSummarySection.style.display = 'block';
+        parentSummaryTableBody.innerHTML = '';
+        document.getElementById('parent-summary-count').textContent = `見つかった候補: ${results.length}件`;
+
+        if (results.length === 0) {
+            const row = parentSummaryTableBody.insertRow();
+            const cell = row.insertCell();
+            cell.colSpan = 2;
+            cell.textContent = "条件に合う候補は見つかりませんでした。";
+            return;
+        }
+
+        results.forEach(result => {
+            const row = parentSummaryTableBody.insertRow();
+            row.classList.add('clickable-row');
+            const cell1 = row.insertCell();
+            const cell2 = row.insertCell();
+            
+            const displayNames = exploringSlots.map(slot => {
+                const name = result.combination[slot];
+                const displayName = {
+                    'parent1': '親①', 'parent2': '親②', 'grandpa1': '親①祖父',
+                    'grandma1': '親①祖母', 'grandpa2': '親②祖父', 'grandma2': '親②祖母'
+                }[slot];
+                return `${displayName}:${name}`;
+            }).join(' / ');
+            
+            cell1.textContent = displayNames;
+            cell2.textContent = result.matches;
+            
+            row.addEventListener('click', () => {
+                if (currentDetailRow && currentDetailRow.previousSibling === row) {
+                    currentDetailRow.remove();
+                    currentDetailRow = null;
+                    return;
+                }
+                
+                if (currentDetailRow) {
+                    currentDetailRow.remove();
+                    currentDetailRow = null;
+                }
+
+                const data = {
+                    ...Object.fromEntries(fixedSlots.map(slot => [slot, form[slot].value || null])),
+                    common_secret_iii: form.common_secret_iii.value,
+                    common_secret_ii: form.common_secret_ii.value,
+                    target_symbol: form.target_symbol.value,
+                    target_affinity_value: form.target_affinity_value.value,
+                    excluded_monsters: getExcludedMonsters()
+                };
+
+                for (const key in result.combination) {
+                    data[key] = result.combination[key];
+                }
+
+                loadingMessage.style.display = 'block';
+                
+                fetch('/get_details', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                })
+                .then(response => response.json())
+                .then(detailedResults => {
+                    loadingMessage.style.display = 'none';
+                    updateChildDetailsTableInPlace(row, detailedResults, data.parent1, data.parent2);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    loadingMessage.style.display = 'none';
+                    alert("詳細探索中にエラーが発生しました。");
+                });
+            });
+        });
+    }
+    
+    function displayChildDetails(results, parent1, parent2) {
+        childDetailsSection.style.display = 'block';
+        document.getElementById('display-parent1').textContent = parent1 || '未選択';
+        document.getElementById('display-parent2').textContent = parent2 || '未選択';
+        const tableBody = document.querySelector('#child-details-section #child-details-table tbody');
+        tableBody.innerHTML = '';
+
+        const allEntries = bloodlines.map(bloodline => {
+            const result = results.find(r => r.child_bloodline === bloodline);
+            return {
+                child_bloodline: bloodline,
+                total_affinity: result ? result.total_affinity : null
+            };
+        });
+
+        allEntries.sort((a, b) => {
+            const affinityA = a.total_affinity === null ? -Infinity : a.total_affinity;
+            const affinityB = b.total_affinity === null ? -Infinity : b.total_affinity;
+            return affinityB - affinityA;
+        });
+
+        allEntries.forEach(entry => {
+            const row = tableBody.insertRow();
+            const childCell = row.insertCell();
+            const affinityCell = row.insertCell();
+            childCell.textContent = entry.child_bloodline;
+            affinityCell.textContent = entry.total_affinity !== null ? entry.total_affinity.toFixed(2) : '-';
+        });
+    }
+
+    function updateChildDetailsTableInPlace(parentRow, results, selectedParent1, selectedParent2) {
+        const detailRow = document.createElement('tr');
+        const detailCell = document.createElement('td');
+        detailCell.colSpan = 2;
+
+        const parentInfo = document.createElement('p');
+        parentInfo.innerHTML = `**親①**: ${selectedParent1 || '未選択'} / **親②**: ${selectedParent2 || '未選択'}`;
+        parentInfo.style.fontWeight = 'bold';
+        detailCell.appendChild(parentInfo);
+
+        const table = document.createElement('table');
+        const thead = table.createTHead();
+        const tbody = table.createTBody();
+        const headerRow = thead.insertRow();
+        headerRow.insertCell().textContent = '子モンスター';
+        headerRow.insertCell().textContent = '最終相性値';
+        table.style.width = '100%';
+        table.style.marginTop = '10px';
+        table.style.border = '1px solid #ccc';
+        table.style.borderRadius = '4px';
+        
+        const allEntries = bloodlines.map(bloodline => {
+            const result = results.find(r => r.child_bloodline === bloodline);
+            return {
+                child_bloodline: bloodline,
+                total_affinity: result ? result.total_affinity : null
+            };
+        });
+
+        allEntries.sort((a, b) => {
+            const affinityA = a.total_affinity === null ? -Infinity : a.total_affinity;
+            const affinityB = b.total_affinity === null ? -Infinity : b.total_affinity;
+            return affinityB - affinityA;
+        });
+
+        allEntries.forEach(entry => {
+            const row = tbody.insertRow();
+            const childCell = row.insertCell();
+            const affinityCell = row.insertCell();
+            childCell.textContent = entry.child_bloodline;
+            affinityCell.textContent = entry.total_affinity !== null ? entry.total_affinity.toFixed(2) : '-';
+        });
+
+        detailCell.appendChild(table);
+        detailRow.appendChild(detailCell);
+
+        parentRow.after(detailRow);
+
+        currentDetailRow = detailRow;
+    }
+</script>
+</body>
+</html>
