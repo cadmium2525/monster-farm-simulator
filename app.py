@@ -17,6 +17,7 @@ try:
         'grandpa_bloodline': 'category',
         'grandma_bloodline': 'category'
     })
+    # **修正1**: C値の事前フィルタリングを削除
     part_c_df = pd.read_csv('part_C_lookup_table.csv').astype({
         'parent1_bloodline': 'category',
         'parent2_bloodline': 'category'
@@ -24,11 +25,6 @@ try:
 except FileNotFoundError:
     print("エラー: CSVファイルが見つかりません。最初に生成スクリプトを実行してください。")
     exit()
-
-# C値の上位10%を事前に抽出
-C_AFFINITY_THRESHOLD = 0.90
-top_c_threshold = part_c_df['c_affinity'].quantile(C_AFFINITY_THRESHOLD)
-part_c_df = part_c_df[part_c_df['c_affinity'] >= top_c_threshold]
 
 # 目標相性値の辞書
 TARGET_AFFINITY_SCORES = {
@@ -46,12 +42,24 @@ SUB_BLOODLINE_RARE_BONUS = 224
 
 ### ルックアップ辞書の事前構築 ###
 print("--- ルックアップ辞書の構築を開始します ---")
-part_c_lookup = part_c_df.set_index(['parent1_bloodline', 'parent2_bloodline']).to_dict()['c_affinity']
+
+# 問題1の修正: 非対称と対称の両方のC値ルックアップ辞書を構築
+# 非対称辞書 (順序を保持)
+part_c_lookup_asymmetric = part_c_df.set_index(['parent1_bloodline', 'parent2_bloodline']).to_dict()['c_affinity']
+# 対称辞書 (ソート済み)
+part_c_df['sorted_parents'] = part_c_df.apply(lambda row: tuple(sorted((row['parent1_bloodline'], row['parent2_bloodline']))), axis=1)
+part_c_lookup_symmetric = part_c_df.set_index('sorted_parents').to_dict()['c_affinity']
+
+# C値を取得するヘルパー関数
+def get_c_value(p1, p2):
+    val = part_c_lookup_asymmetric.get((p1, p2))
+    if val is not None:
+        return val
+    return part_c_lookup_symmetric.get(tuple(sorted((p1, p2))))
+
 part_affinity_lookup = part_affinity_df.set_index(['parent_bloodline', 'grandpa_bloodline', 'grandma_bloodline', 'child_bloodline']).to_dict()['main_affinity']
 
 # 親と子から最適な祖父母を見つけるためのルックアップを事前に計算
-# A値とB値の最適化
-# Key: (parent_bloodline, child_bloodline) -> Value: (best_affinity, grandpa_bloodline, grandma_bloodline)
 best_ab_lookup = {}
 all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
 for parent in all_bloodlines:
@@ -108,7 +116,6 @@ def explore_combinations():
     common_secret_bonus = (common_secret_iii * COMMON_SECRET_III_BONUS) + (common_secret_ii * COMMON_SECRET_II_BONUS)
     fixed_bonus = common_secret_bonus + SUB_BLOODLINE_RARE_BONUS
 
-    # 目標相性値の決定ロジック
     if target_affinity_value is not None and target_affinity_value != '':
         try:
             target_min = float(target_affinity_value)
@@ -123,15 +130,15 @@ def explore_combinations():
 
     # すべてのスロットが固定されている場合の処理
     if not exploring_slot_keys:
+        child = fixed_slots['child']
         p1 = fixed_slots['parent1']
         p2 = fixed_slots['parent2']
         gp1 = fixed_slots['grandpa1']
         gm1 = fixed_slots['grandma1']
         gp2 = fixed_slots['grandpa2']
         gm2 = fixed_slots['grandma2']
-        child = fixed_slots['child']
 
-        c_val = part_c_lookup.get(tuple(sorted((p1, p2))), None)
+        c_val = get_c_value(p1, p2)
         a_val = part_affinity_lookup.get((p1, gp1, gm1, child), None)
         b_val = part_affinity_lookup.get((p2, gp2, gm2, child), None)
 
@@ -162,7 +169,7 @@ def explore_combinations():
         gp2 = fixed_slots['grandpa2']
         gm2 = fixed_slots['grandma2']
         
-        c_val = part_c_lookup.get(tuple(sorted((p1, p2))), None)
+        c_val = get_c_value(p1, p2)
         if c_val is None:
             return jsonify([])
         
@@ -191,28 +198,32 @@ def explore_combinations():
         best_combination = None
         
         child_bl = fixed_slots['child']
-        
-        # 1. C値で親候補を絞り込む
-        # C値の高い順に上位1000件の親ペアを取得
-        c_candidates = sorted(part_c_lookup.items(), key=lambda item: item[1], reverse=True)[:1000]
-        
+
+        # 問題2の修正: 親が固定されている場合は、C値の事前フィルタリングを無視
+        if fixed_slots['parent1'] is not None and fixed_slots['parent2'] is not None:
+            print("--- 親が固定されているため、C値フィルタリングをスキップします。---")
+            c_candidates = [((fixed_slots['parent1'], fixed_slots['parent2']), get_c_value(fixed_slots['parent1'], fixed_slots['parent2']))]
+        else:
+            print("--- 親が未指定のため、C値の上位10%で候補を絞り込みます。---")
+            C_AFFINITY_THRESHOLD = 0.90
+            top_c_threshold = part_c_df['c_affinity'].quantile(C_AFFINITY_THRESHOLD)
+            top_c_df = part_c_df[part_c_df['c_affinity'] >= top_c_threshold]
+            c_candidates = sorted(top_c_df.set_index(['parent1_bloodline', 'parent2_bloodline']).to_dict()['c_affinity'].items(), key=lambda item: item[1], reverse=True)[:1000]
+            
         processed_count = 0
         for (p1_cand, p2_cand), c_val in c_candidates:
             if is_exploration_cancelled.is_set():
                 print("--- 探索が中断されました ---")
                 return jsonify({"error": "探索が中止されました"}), 500
 
-            # 固定されている親がいれば、その親を含むペアのみを考慮
             if fixed_slots['parent1'] is not None and p1_cand != fixed_slots['parent1'] and p2_cand != fixed_slots['parent1']:
                 continue
             if fixed_slots['parent2'] is not None and p1_cand != fixed_slots['parent2'] and p2_cand != fixed_slots['parent2']:
                 continue
                 
-            # 除外モンスターは考慮しない
             if p1_cand in excluded_monsters or p2_cand in excluded_monsters:
                 continue
 
-            # 2. A値とB値の最適値を個別に探索
             best_a_val = -1
             best_b_val = -1
             best_gp1 = fixed_slots['grandpa1']
@@ -220,7 +231,6 @@ def explore_combinations():
             best_gp2 = fixed_slots['grandpa2']
             best_gm2 = fixed_slots['grandma2']
             
-            # A値の探索
             if fixed_slots['parent1'] is None or fixed_slots['parent1'] == p1_cand:
                 a_val, gp1_cand, gm1_cand = best_ab_lookup.get((p1_cand, child_bl), (None, None, None))
                 if a_val is not None:
@@ -228,7 +238,6 @@ def explore_combinations():
                     if fixed_slots['grandpa1'] is None: best_gp1 = gp1_cand
                     if fixed_slots['grandma1'] is None: best_gm1 = gm1_cand
 
-            # B値の探索
             if fixed_slots['parent2'] is None or fixed_slots['parent2'] == p2_cand:
                 b_val, gp2_cand, gm2_cand = best_ab_lookup.get((p2_cand, child_bl), (None, None, None))
                 if b_val is not None:
@@ -239,7 +248,6 @@ def explore_combinations():
             if best_a_val != -1 and best_b_val != -1:
                 total_affinity = best_a_val + best_b_val + c_val + fixed_bonus
                 
-                # 3. 最高値を追跡
                 if total_affinity > best_affinity:
                     best_affinity = total_affinity
                     best_combination = {
@@ -257,7 +265,6 @@ def explore_combinations():
 
         print("\n--- ヒューリスティック探索完了 ---")
         if best_combination:
-            # 探索対象のスロットのみを結果に含める
             result_combination = {key: best_combination[key] for key in exploring_slot_keys if key in best_combination}
             result = {
                 'best_affinity': best_affinity,
@@ -267,13 +274,16 @@ def explore_combinations():
         else:
             return jsonify([])
 
-    # 以下、子が指定されていない場合の既存のサマリー探索ロジック
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
         summary_results = {}
         exploring_slot_keys = [key for key, value in fixed_slots.items() if value is None and key != 'child']
         all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
         explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
+
+        C_AFFINITY_THRESHOLD = 0.90
+        top_c_threshold = part_c_df['c_affinity'].quantile(C_AFFINITY_THRESHOLD)
+        part_c_lookup_for_summary = part_c_df[part_c_df['c_affinity'] >= top_c_threshold].set_index(['parent1_bloodline', 'parent2_bloodline']).to_dict()['c_affinity']
     
         if not exploring_slot_keys:
             return jsonify([])
@@ -306,10 +316,9 @@ def explore_combinations():
     
             if not p1 or not p2: continue
             
-            c_val = part_c_lookup.get(tuple(sorted((p1, p2))), None)
+            c_val = get_c_value(p1, p2)
             if c_val is None: continue
             
-            # 親と祖父母の組み合わせをキーとして使用
             combo_parts = [current_fixed_slots[key] for key in exploring_slot_keys]
             summary_key = tuple(combo_parts)
             
@@ -375,7 +384,8 @@ def get_details():
     gp2 = fixed_slots['grandpa2']
     gm2 = fixed_slots['grandma2']
 
-    c_val = part_c_lookup.get(tuple(sorted((p1, p2))), None)
+    # **修正2**: get_c_value関数を使用するように変更
+    c_val = get_c_value(p1, p2)
     if c_val is None:
         return jsonify([])
  
