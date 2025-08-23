@@ -294,7 +294,7 @@ def explore_combinations():
         is_fast_mode = len(exploring_slot_keys) >= 4
         if is_fast_mode:
             print("空きスロットが4つ以上の為、高速モードで探索します。")
-            sample_size = 150000
+            sample_size = 100000
             sampled_combinations = [
                 tuple(random.choices(explorable_bloodlines, k=len(exploring_slot_keys)))
                 for _ in range(sample_size)
