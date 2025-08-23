@@ -154,6 +154,57 @@
             border: 2px solid #007bff;
             box-shadow: 0 0 5px #007bff;
         }
+        
+        /* 💡 修正点: 詳細表示のテーブルを調整 */
+        .detailed-results-table {
+            width: auto; /* テーブルの幅をコンテンツに合わせる */
+            max-width: 400px; /* 最大幅を設定して、間延びを防ぐ */
+            margin-left: auto;
+            margin-right: auto;
+            font-size: 14px; /* フォントサイズを小さく */
+        }
+        .detailed-results-table th, .detailed-results-table td {
+            padding: 8px 12px; /* 余白を調整 */
+        }
+        #parent-summary-table td:last-child {
+            text-align: center;
+        }
+
+        /* 💡 スピナー表示とボタンサイズの修正 */
+        .loading-animation {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #007bff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loading-message {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #start-button {
+            padding: 12px 16px;
+        }
+
+        /* 💡 リセットボタンのスタイル */
+        #reset-button {
+            background-color: #dc3545; /* 赤色 */
+            width: auto; /* ボタンの幅をコンテンツに合わせる */
+            padding: 10px 15px; /* 「選択」ボタンと同じサイズに */
+        }
+        #reset-button:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
@@ -205,7 +256,7 @@
                 <div id="excluded-monsters-container" class="monster-grid">
                     </div>
                 <hr>
-                <h2>固定するモンスター（空欄は探索対象）</h2>
+                <h2>固定するモンスター（空欄は探索対象） </h2>
                 <p>探索対象として空欄のままにすることもできます。</p>
                 <div class="input-group">
                     <label for="child">子:</label>
@@ -258,6 +309,7 @@
                 </div>
                 <div class="button-group">
                     <button type="submit" id="start-button">探索開始</button>
+                    <button type="button" id="reset-button">入力リセット</button>
                     <button type="button" id="cancel-button" style="display: none;">探索中止</button>
                 </div>
             </form>
@@ -265,7 +317,7 @@
 
         <div id="results-container" class="results-container">
             <h2>探索結果</h2>
-            <div id="loading-message" style="display: none; text-align: center;">探索中です...</div>
+            <div id="loading-message" style="display: none;">探索中です...<div class="loading-animation"></div></div>
             
             <div id="best-combination-section" class="results-section" style="display: none;">
                 <h3>最高の相性値を持つ組み合わせ</h3>
@@ -278,7 +330,7 @@
             <div id="parent-summary-section" class="results-section" style="display: none;">
                 <p id="parent-summary-count"></p>
                 <p>以下の候補をクリックすると、子との組み合わせ詳細が表示されます。</p>
-                <table id="parent-summary-table">
+                <table id="parent-summary-table" style="margin: auto;">
                     <thead>
                         <tr>
                             <th>候補モンスター</th>
@@ -293,7 +345,7 @@
             <div id="child-details-section" class="results-section" style="display: none;">
                 <h3>選択された組み合わせの詳細</h3>
                 <p>親①：<span id="display-parent1"></span> / 親②：<span id="display-parent2"></span></p>
-                <table id="child-details-table">
+                <table id="child-details-table" style="margin: auto;">
                     <thead>
                         <tr>
                             <th>子モンスター</th>
@@ -355,7 +407,8 @@
         });
         startButton.style.display = disabled ? 'none' : 'inline-block';
         cancelButton.style.display = disabled ? 'inline-block' : 'none';
-        loadingMessage.style.display = disabled ? 'block' : 'none';
+        
+        loadingMessage.style.display = disabled ? 'flex' : 'none';
     }
 
     function incrementSecret(inputId, value) {
@@ -435,6 +488,17 @@
     function getExcludedMonsters() {
         return Array.from(excludedMonsters);
     }
+
+    // 💡 新しい関数: 固定モンスターの入力欄をリセットする
+    function resetFixedInputs() {
+        fixedSlots.forEach(slot => {
+            document.getElementById(slot).value = '';
+        });
+    }
+
+    // 💡 リセットボタンにイベントリスナーを追加
+    document.getElementById('reset-button').addEventListener('click', resetFixedInputs);
+
 
     form.addEventListener('submit', function(event) {
         event.preventDefault();
@@ -603,7 +667,7 @@
                     data[key] = result.combination[key];
                 }
 
-                loadingMessage.style.display = 'block';
+                loadingMessage.style.display = 'flex';
                 
                 fetch('/get_details', {
                     method: 'POST',
@@ -674,6 +738,8 @@
         table.style.marginTop = '10px';
         table.style.border = '1px solid #ccc';
         table.style.borderRadius = '4px';
+        
+        table.classList.add('detailed-results-table');
         
         const allEntries = bloodlines.map(bloodline => {
             const result = results.find(r => r.child_bloodline === bloodline);
