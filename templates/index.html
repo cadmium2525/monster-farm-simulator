@@ -247,6 +247,16 @@
             height: 50px;
             border: 2px solid #007bff;
         }
+#clear-selected-button {
+    background-color: #dc3545; /* 赤色 */
+    color: white; /* 文字色を白に */
+    border: 1px solid #dc3545;
+}
+
+#clear-selected-button:hover {
+    background-color: #c82333; /* ホバー時の暗い赤色 */
+}
+
     </style>
 </head>
 <body>
@@ -442,8 +452,8 @@
                     {% endfor %}
                 </div>
                 <div class="monster-selector-container" style="margin-top: 10px;">
-                    <button type="button" onclick="clearSelectedMonsters()" class="select-button" id="clear-selected-button">選択を解除</button>
                     <button type="button" onclick="confirmMultiSelection()" class="select-button">決定</button>
+                    <button type="button" onclick="clearSelectedMonsters()" class="select-button" id="clear-selected-button">選択を解除</button>
                 </div>
             </div>
             <div id="monster-grid" class="monster-grid">
