@@ -205,6 +205,48 @@
         #reset-button:hover {
             background-color: #c82333;
         }
+        
+        /* 新しいUI要素のスタイル */
+        .mode-selection {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .mode-selection label {
+            display: inline-block;
+            margin-bottom: 0;
+        }
+        .monster-category-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .monster-category-buttons button {
+            flex-grow: 1;
+            padding: 8px 12px;
+            font-size: 12px;
+            background-color: #e9ecef;
+            color: #333;
+            border: 1px solid #ccc;
+            width: calc(33.333% - 10px);
+        }
+        .monster-category-buttons button.selected {
+            background-color: #007bff;
+            color: white;
+        }
+        #selected-children-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        #selected-children-container .monster-icon {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #007bff;
+        }
     </style>
 </head>
 <body>
@@ -214,6 +256,13 @@
 
         <div class="input-section">
             <h2>探索条件</h2>
+            <div class="mode-selection">
+                <label>モード選択:</label>
+                <input type="radio" id="mode-single" name="exploration-mode" value="single" checked>
+                <label for="mode-single">シングル</label>
+                <input type="radio" id="mode-multi" name="exploration-mode" value="multi">
+                <label for="mode-multi">マルチ</label>
+            </div>
             <form id="exploration-form">
                 <div class="input-group">
                     <label for="common_secret_iii">共通秘伝Ⅲの数:</label>
@@ -233,11 +282,11 @@
                         <button type="button" onclick="incrementSecret('common_secret_ii', 5)">+5</button>
                     </div>
                 </div>
-                <div class="input-group">
+                <div class="input-group" id="limit-group">
                     <label for="limit">表示件数（上位）:</label>
                     <input type="number" id="limit" name="limit" value="50" min="1">
                 </div>
-                <div class="input-group">
+                <div class="input-group" id="target-affinity-group">
                     <label>目標相性値:</label>
                     <div class="target-affinity-container">
                         <select id="target_symbol" name="target_symbol">
@@ -254,15 +303,23 @@
                 <hr>
                 <h2>探索から除外するモンスター</h2>
                 <div id="excluded-monsters-container" class="monster-grid">
-                    </div>
+                </div>
                 <hr>
                 <h2>固定するモンスター（空欄は探索対象） </h2>
                 <p>探索対象として空欄のままにすることもできます。</p>
-                <div class="input-group">
+                <div id="child-single-mode" class="input-group">
                     <label for="child">子:</label>
                     <div class="monster-selector-container">
                         <input type="text" id="child" name="child" value="" readonly placeholder="探索対象">
                         <button type="button" class="select-button" onclick="openMonsterSelector('child')">選択</button>
+                    </div>
+                </div>
+                <div id="child-multi-mode" class="input-group" style="display: none;">
+                    <label>子（複数選択）:</label>
+                    <div id="selected-children-container"></div>
+                    <div class="monster-selector-container">
+                        <input type="text" id="multi-child-input" style="display: none;">
+                        <button type="button" class="select-button" onclick="openMonsterSelector('multi-child')">選択</button>
                     </div>
                 </div>
                 <div class="input-group">
@@ -327,6 +384,15 @@
                 </div>
             </div>
 
+            <div id="multi-mode-result-section" class="results-section" style="display: none;">
+                <h3>最高の最低保証相性値を持つ組み合わせ</h3>
+                <div id="multi-mode-result" class="best-combination-result">
+                    <p id="multi-combination-info">...</p>
+                    <p>最低保証相性値: <span id="min-guaranteed-affinity" class="highlight"></span></p>
+                    <div id="multi-children-details"></div>
+                </div>
+            </div>
+
             <div id="parent-summary-section" class="results-section" style="display: none;">
                 <p id="parent-summary-count"></p>
                 <p>以下の候補をクリックすると、子との組み合わせ詳細が表示されます。</p>
@@ -363,12 +429,25 @@
         <div class="modal-content">
             <span class="close-button" onclick="closeMonsterSelector()">&times;</span>
             <h4>モンスターを選択</h4>
-            <div class="monster-selector-container">
-                <input type="text" id="monster-search" placeholder="検索...">
-                <button type="button" onclick="selectMonster('')" class="select-button">クリア</button>
+            <div id="single-selection-buttons">
+                <div class="monster-selector-container">
+                    <input type="text" id="monster-search" placeholder="検索...">
+                    <button type="button" onclick="selectMonster('')" class="select-button">クリア</button>
+                </div>
+            </div>
+            <div id="multi-selection-buttons" style="display: none;">
+                <div class="monster-category-buttons">
+                    {% for category in monster_categories %}
+                        <button type="button" onclick="selectByCategory('{{ category }}')">{{ category }}</button>
+                    {% endfor %}
+                </div>
+                <div class="monster-selector-container" style="margin-top: 10px;">
+                    <button type="button" onclick="clearSelectedMonsters()" class="select-button" id="clear-selected-button">選択を解除</button>
+                    <button type="button" onclick="confirmMultiSelection()" class="select-button">決定</button>
+                </div>
             </div>
             <div id="monster-grid" class="monster-grid">
-                </div>
+            </div>
         </div>
     </div>
 
@@ -383,22 +462,38 @@
     const bestCombinationSection = document.getElementById('best-combination-section');
     const bestCombinationInfo = document.getElementById('best-combination-info');
     const bestAffinitySpan = document.getElementById('best-affinity');
+    const multiModeResultSection = document.getElementById('multi-mode-result-section');
+    const multiCombinationInfo = document.getElementById('multi-combination-info');
+    const minGuaranteedAffinitySpan = document.getElementById('min-guaranteed-affinity');
+    const multiChildrenDetailsDiv = document.getElementById('multi-children-details');
     const fixedSlots = ['child', 'parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2'];
     const bloodlines = JSON.parse('{{ bloodlines | tojson }}');
     const monsterSelectorModal = document.getElementById('monster-selector-modal');
     const monsterGrid = document.getElementById('monster-grid');
     const monsterSearch = document.getElementById('monster-search');
     const excludedMonstersContainer = document.getElementById('excluded-monsters-container');
+    const selectedChildrenContainer = document.getElementById('selected-children-container');
+    const monsterCategories = JSON.parse('{{ monsters_by_category | tojson }}');
+    const modeSingle = document.getElementById('mode-single');
+    const modeMulti = document.getElementById('mode-multi');
+    const childSingleMode = document.getElementById('child-single-mode');
+    const childMultiMode = document.getElementById('child-multi-mode');
+    const singleSelectionButtons = document.getElementById('single-selection-buttons');
+    const multiSelectionButtons = document.getElementById('multi-selection-buttons');
 
     const staticImagesPath = "{{ url_for('static', filename='images/') }}";
-    const excludedMonsters = new Set(); // 除外モンスターを管理するSet
-
+    const excludedMonsters = new Set(); 
+    const selectedChildren = new Set();
+    
     let currentDetailRow = null;
     let currentRequestId = null;
-    let currentSelectionSlot = null; // 現在選択中の入力欄を追跡
+    let currentSelectionSlot = null;
+    let explorationMode = 'single';
 
-    // 初期表示時に除外モンスターアイコンを生成
+    // 初期表示
+    updateModeDisplay();
     generateExcludedIcons();
+    updateSelectedChildrenUI();
 
     function toggleForm(disabled) {
         const inputs = form.querySelectorAll('input, select, button:not(#cancel-button)');
@@ -421,7 +516,15 @@
     function openMonsterSelector(slotId) {
         currentSelectionSlot = slotId;
         monsterSelectorModal.style.display = "block";
-        generateMonsterIcons(bloodlines);
+        if (slotId === 'multi-child') {
+            singleSelectionButtons.style.display = 'none';
+            multiSelectionButtons.style.display = 'block';
+            generateMonsterIcons(bloodlines, true);
+        } else {
+            singleSelectionButtons.style.display = 'block';
+            multiSelectionButtons.style.display = 'none';
+            generateMonsterIcons(bloodlines, false);
+        }
     }
     
     function closeMonsterSelector() {
@@ -429,16 +532,24 @@
         monsterSearch.value = "";
     }
 
-    function generateMonsterIcons(monsterList) {
+    function generateMonsterIcons(monsterList, isMultiSelection) {
         monsterGrid.innerHTML = '';
         monsterList.forEach(monster => {
             const img = document.createElement('img');
             const imageUrl = staticImagesPath + monster + '.png';
             img.src = imageUrl;
             img.alt = monster;
-            img.title = imageUrl; // デバッグ用にパスをツールチップとして表示
+            img.title = monster; 
             img.classList.add('monster-icon');
-            img.onclick = () => selectMonster(monster);
+            
+            if (isMultiSelection) {
+                if (selectedChildren.has(monster)) {
+                    img.classList.add('selected');
+                }
+                img.onclick = () => toggleMultiSelection(monster, img);
+            } else {
+                img.onclick = () => selectMonster(monster);
+            }
             monsterGrid.appendChild(img);
         });
     }
@@ -450,13 +561,56 @@
         closeMonsterSelector();
     }
     
+    function toggleMultiSelection(monsterName, element) {
+        if (selectedChildren.has(monsterName)) {
+            selectedChildren.delete(monsterName);
+            element.classList.remove('selected');
+        } else {
+            selectedChildren.add(monsterName);
+            element.classList.add('selected');
+        }
+    }
+
+    function selectByCategory(category) {
+        const monstersInCategory = monsterCategories[category] || [];
+        monstersInCategory.forEach(monster => {
+            selectedChildren.add(monster);
+        });
+        generateMonsterIcons(bloodlines, true);
+    }
+
+    function clearSelectedMonsters() {
+        selectedChildren.clear();
+        generateMonsterIcons(bloodlines, true);
+    }
+    
+    function confirmMultiSelection() {
+        updateSelectedChildrenUI();
+        closeMonsterSelector();
+    }
+
+    function updateSelectedChildrenUI() {
+        selectedChildrenContainer.innerHTML = '';
+        if (selectedChildren.size === 0) {
+            selectedChildrenContainer.textContent = '未選択';
+            return;
+        }
+        selectedChildren.forEach(monster => {
+            const img = document.createElement('img');
+            img.src = staticImagesPath + monster + '.png';
+            img.alt = monster;
+            img.title = monster;
+            img.classList.add('monster-icon');
+            selectedChildrenContainer.appendChild(img);
+        });
+    }
+
     monsterSearch.addEventListener('input', (e) => {
         const query = e.target.value.toLowerCase();
         const filteredMonsters = bloodlines.filter(monster => monster.toLowerCase().includes(query));
-        generateMonsterIcons(filteredMonsters);
+        generateMonsterIcons(filteredMonsters, currentSelectionSlot === 'multi-child');
     });
 
-    // 新しい関数: 除外モンスターアイコンを生成
     function generateExcludedIcons() {
         excludedMonstersContainer.innerHTML = '';
         bloodlines.forEach(monster => {
@@ -473,7 +627,6 @@
         });
     }
 
-    // 新しい関数: 除外モンスターの選択状態を切り替える
     function toggleExcludedMonster(monsterName, element) {
         if (excludedMonsters.has(monsterName)) {
             excludedMonsters.delete(monsterName);
@@ -484,20 +637,33 @@
         }
     }
 
-    // getExcludedMonsters関数を修正
     function getExcludedMonsters() {
         return Array.from(excludedMonsters);
     }
 
-    // 💡 新しい関数: 固定モンスターの入力欄をリセットする
     function resetFixedInputs() {
         fixedSlots.forEach(slot => {
             document.getElementById(slot).value = '';
         });
+        selectedChildren.clear();
+        updateSelectedChildrenUI();
     }
-
-    // 💡 リセットボタンにイベントリスナーを追加
+    
     document.getElementById('reset-button').addEventListener('click', resetFixedInputs);
+
+    modeSingle.addEventListener('change', updateModeDisplay);
+    modeMulti.addEventListener('change', updateModeDisplay);
+    
+    function updateModeDisplay() {
+        explorationMode = document.querySelector('input[name="exploration-mode"]:checked').value;
+        if (explorationMode === 'single') {
+            childSingleMode.style.display = 'block';
+            childMultiMode.style.display = 'none';
+        } else {
+            childSingleMode.style.display = 'none';
+            childMultiMode.style.display = 'block';
+        }
+    }
 
 
     form.addEventListener('submit', function(event) {
@@ -507,6 +673,7 @@
 
         parentSummarySection.style.display = 'none';
         bestCombinationSection.style.display = 'none';
+        multiModeResultSection.style.display = 'none';
         childDetailsSection.style.display = 'none';
         if (currentDetailRow) {
             currentDetailRow.remove();
@@ -516,9 +683,19 @@
         currentRequestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
         
         const data = {};
-        fixedSlots.forEach(slot => {
-            data[slot] = form[slot].value || null;
-        });
+        if (explorationMode === 'single') {
+            fixedSlots.forEach(slot => {
+                data[slot] = form[slot].value || null;
+            });
+        } else {
+            fixedSlots.forEach(slot => {
+                if (slot !== 'child') {
+                    data[slot] = form[slot].value || null;
+                }
+            });
+            data.selected_children = Array.from(selectedChildren);
+        }
+
         data.common_secret_iii = form.common_secret_iii.value;
         data.common_secret_ii = form.common_secret_ii.value;
         data.target_symbol = form.target_symbol.value;
@@ -527,13 +704,9 @@
         data.excluded_monsters = getExcludedMonsters();
         data.request_id = currentRequestId;
         
-        const exploringSlots = fixedSlots.filter(slot => form[slot].value === '' && slot !== 'child');
-        
-        if (form.child.value === '' && exploringSlots.length >= 4) {
-            alert('空きスロットが4つ以上の為、高速モードで探索します。正確性は落ちますが、ご理解ください。');
-        }
+        const endpoint = explorationMode === 'single' ? '/explore' : '/explore_multi';
 
-        fetch('/explore', {
+        fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
@@ -547,18 +720,18 @@
         .then(results => {
             toggleForm(false);
             
+            if (explorationMode === 'multi') {
+                displayMultiModeResult(results);
+            }
             // サーバーのレスポンス形式をチェック
-            // 詳細情報が直接返された場合
-            if (results.length > 0 && results[0].hasOwnProperty('child_bloodline')) {
+            else if (results.length > 0 && results[0].hasOwnProperty('child_bloodline')) {
                 displayChildDetails(results, data.parent1, data.parent2);
             }
-            // 最良の組み合わせが返された場合
             else if (data.child) {
                 displayBestCombination(results);
             } 
-            // サマリーが返された場合
             else {
-                displayParentSummary(results, exploringSlots);
+                displayParentSummary(results, fixedSlots.filter(slot => form[slot].value === '' && slot !== 'child'));
             }
         })
         .catch(error => {
@@ -610,6 +783,44 @@
             bestAffinitySpan.textContent = result.best_affinity.toFixed(2);
         }
     }
+    
+    function displayMultiModeResult(results) {
+        multiModeResultSection.style.display = 'block';
+        multiChildrenDetailsDiv.innerHTML = '';
+
+        if (results.length === 0) {
+            multiCombinationInfo.textContent = "条件に合う最高の組み合わせは見つかりませんでした。";
+            minGuaranteedAffinitySpan.textContent = "-";
+            return;
+        }
+
+        const result = results[0];
+        const combo = result.combination;
+        
+        multiCombinationInfo.textContent = `親①: ${combo.parent1} / 親②: ${combo.parent2}`;
+        minGuaranteedAffinitySpan.textContent = result.min_guaranteed_affinity.toFixed(2);
+        
+        const detailsList = document.createElement('ul');
+        detailsList.style.listStyleType = 'none';
+        detailsList.style.padding = '0';
+        
+        const children = Object.keys(result.children_details).sort(); // Fix: Changed combo.children_details to result.children_details
+        
+        children.forEach(child => {
+            const detail = result.children_details[child];
+            const listItem = document.createElement('li');
+            listItem.innerHTML = `
+                <img src="${staticImagesPath + child}.png" alt="${child}" style="width: 30px; height: 30px; vertical-align: middle;">
+                <strong>${child}</strong>: ${detail.affinity !== -1 ? detail.affinity.toFixed(2) : '-'}
+                (親①祖父: ${combo.grandpa1 || '-'}, 親①祖母: ${combo.grandma1 || '-'} |
+                親②祖父: ${combo.grandpa2 || '-'}, 親②祖母: ${combo.grandma2 || '-'})
+            `;
+            detailsList.appendChild(listItem);
+        });
+        
+        multiChildrenDetailsDiv.appendChild(detailsList);
+    }
+
 
     function displayParentSummary(results, exploringSlots) {
         parentSummarySection.style.display = 'block';
