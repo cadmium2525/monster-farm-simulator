@@ -453,10 +453,9 @@ def explore_multi_combinations():
     common_secret_ii = int(data.get('common_secret_ii', 0))
     excluded_monsters = set(data.get('excluded_monsters', []))
     selected_children = data.get('selected_children', [])
-    limit = int(data.get('limit', 50))
-
-    if not selected_children:
-        return jsonify({"error": "マルチモードでは子モンスターを1体以上選択してください。"}), 400
+    
+    if len(selected_children) < 2:
+        return jsonify({"error": "マルチモードでは子モンスターを2体以上選択してください。"}), 400
 
     fixed_slots = {
         'parent1': data.get('parent1', None),
@@ -474,21 +473,28 @@ def explore_multi_combinations():
     explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
 
     # 選択肢のフィルタリング
-    parent1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines
-    parent2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
-    grandpa1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else explorable_bloodlines
-    grandma1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else explorable_bloodlines
-    grandpa2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else explorable_bloodlines
-    grandma2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else explorable_bloodlines
+    candidate_lists = []
+    slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
+    
+    for slot in slot_names:
+        if fixed_slots[slot] is not None:
+            candidate_lists.append([fixed_slots[slot]])
+        else:
+            candidate_lists.append(explorable_bloodlines)
+            
+    # 親の組み合わせを重複なく生成するための工夫
+    parent_cand_lists = [
+        [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines,
+        [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
+    ]
 
     best_min_affinity = -1
     best_combination = None
     processed_count = 0
-
-    # 探索の総計算量を概算 (親の組み合わせ * 祖父母の組み合わせ)
-    num_parent_combos = len(parent1_candidates) * len(parent2_candidates)
-    num_ancestor_combos = len(grandpa1_candidates) * len(grandma1_candidates) * len(grandpa2_candidates) * len(grandma2_candidates)
-    total_calculations = num_parent_combos * num_ancestor_combos
+    total_calculations = 1
+    
+    for cand_list in candidate_lists:
+        total_calculations *= len(cand_list)
 
     EXPLORATION_THRESHOLD = 1_000_000
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
@@ -496,114 +502,59 @@ def explore_multi_combinations():
     if is_fast_mode:
         sample_size = min(40000, total_calculations)
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
-        
-        for _ in range(sample_size):
-            if is_exploration_cancelled.is_set():
-                print("--- 探索が中断されました ---")
-                return jsonify({"error": "探索が中止されました"}), 500
-
-            p1_cand = random.choice(parent1_candidates)
-            gp1_cand = random.choice(grandpa1_candidates)
-            gm1_cand = random.choice(grandma1_candidates)
-            p2_cand = random.choice(parent2_candidates)
-            gp2_cand = random.choice(grandpa2_candidates)
-            gm2_cand = random.choice(grandma2_candidates)
-            
-            if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
-               gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
-               gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
-                continue
-
-            c_val = get_c_value(p1_cand, p2_cand)
-            if c_val is None:
-                continue
-            
-            min_affinity_for_this_combo = float('inf')
-            
-            valid_combo = True
-            for child_bl in selected_children:
-                a_val = part_affinity_lookup.get((p1_cand, gp1_cand, gm1_cand, child_bl), None)
-                b_val = part_affinity_lookup.get((p2_cand, gp2_cand, gm2_cand, child_bl), None)
-
-                if a_val is None or b_val is None:
-                    valid_combo = False
-                    break
-                else:
-                    total_affinity = a_val + b_val + c_val + fixed_bonus
-                    min_affinity_for_this_combo = min(min_affinity_for_this_combo, total_affinity)
-            
-            if valid_combo and min_affinity_for_this_combo > best_min_affinity:
-                best_min_affinity = min_affinity_for_this_combo
-                best_combination = {
-                    'parent1': p1_cand,
-                    'grandpa1': gp1_cand,
-                    'grandma1': gm1_cand,
-                    'parent2': p2_cand,
-                    'grandpa2': gp2_cand,
-                    'grandma2': gm2_cand,
-                }
-            
-            processed_count += 1
-            if processed_count % 1000 == 0:
-                print(f"  -> 組み合わせ候補を {processed_count} 件処理中...", end='\r')
-
-    else: # 網羅的探索ロジックの改善
+        exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
+    else:
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) 以内のため、網羅的探索を実行します。")
-        parent_combos_to_explore = itertools.product(parent1_candidates, parent2_candidates)
-        ancestor_combos_to_explore = itertools.product(grandpa1_candidates, grandma1_candidates, grandpa2_candidates, grandma2_candidates)
+        exploration_iterator = itertools.product(*candidate_lists)
 
-        for p1_cand, p2_cand in parent_combos_to_explore:
-            if is_exploration_cancelled.is_set():
-                print("--- 探索が中断されました ---")
-                return jsonify({"error": "探索が中止されました"}), 500
+    for combo in exploration_iterator:
+        if is_exploration_cancelled.is_set():
+            print("--- 探索が中断されました ---")
+            return jsonify({"error": "探索が中止されました"}), 500
 
-            if p1_cand in excluded_monsters or p2_cand in excluded_monsters:
-                continue
+        p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
+
+        if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
+           gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
+           gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
+            continue
+
+        c_val = get_c_value(p1_cand, p2_cand)
+        if c_val is None:
+            continue
+        
+        min_affinity_for_this_combo = float('inf')
+        valid_combo = True
+        
+        for child_bl in selected_children:
+            total_affinity = calculate_affinity(
+                child_bl,
+                p1_cand, p2_cand,
+                gp1_cand, gm1_cand,
+                gp2_cand, gm2_cand,
+                fixed_bonus
+            )
             
-            c_val = get_c_value(p1_cand, p2_cand)
-            if c_val is None:
-                continue
-            
-            processed_count += 1
-            if processed_count % 1000 == 0:
-                print(f"  -> 親ペア候補を {processed_count} 件処理中...", end='\r')
+            if total_affinity != -1:
+                min_affinity_for_this_combo = min(min_affinity_for_this_combo, total_affinity)
+            else:
+                valid_combo = False
+                break
+        
+        if valid_combo and min_affinity_for_this_combo > best_min_affinity:
+            best_min_affinity = min_affinity_for_this_combo
+            best_combination = {
+                'parent1': p1_cand,
+                'grandpa1': gp1_cand,
+                'grandma1': gm1_cand,
+                'parent2': p2_cand,
+                'grandpa2': gp2_cand,
+                'grandma2': gm2_cand
+            }
 
-            for gp1_cand, gm1_cand, gp2_cand, gm2_cand in ancestor_combos_to_explore:
-                if is_exploration_cancelled.is_set():
-                    return jsonify({"error": "探索が中止されました"}), 500
-
-                if gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
-                   gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
-                    continue
-
-                min_affinity_for_this_combo = float('inf')
-                valid_combo = True
-                
-                for child_bl in selected_children:
-                    total_affinity = calculate_affinity(
-                        child_bl,
-                        p1_cand, p2_cand,
-                        gp1_cand, gm1_cand,
-                        gp2_cand, gm2_cand,
-                        fixed_bonus
-                    )
-                    
-                    if total_affinity != -1:
-                        min_affinity_for_this_combo = min(min_affinity_for_this_combo, total_affinity)
-                    else:
-                        valid_combo = False
-                        break
-                
-                if valid_combo and min_affinity_for_this_combo > best_min_affinity:
-                    best_min_affinity = min_affinity_for_this_combo
-                    best_combination = {
-                        'parent1': p1_cand,
-                        'parent2': p2_cand,
-                        'grandpa1': gp1_cand,
-                        'grandma1': gm1_cand,
-                        'grandpa2': gp2_cand,
-                        'grandma2': gm2_cand
-                    }
+        processed_count += 1
+        if processed_count % 1000 == 0:
+            print(f"  -> 組み合わせ候補を {processed_count} 件処理中...", end='\r')
 
     print("\n--- マルチモード探索完了 ---")
     if best_combination:
