@@ -784,42 +784,52 @@
         }
     }
     
-    function displayMultiModeResult(results) {
-        multiModeResultSection.style.display = 'block';
-        multiChildrenDetailsDiv.innerHTML = '';
+function displayMultiModeResult(results) {
+    multiModeResultSection.style.display = 'block';
+    multiChildrenDetailsDiv.innerHTML = '';
 
-        if (results.length === 0) {
-            multiCombinationInfo.textContent = "条件に合う最高の組み合わせは見つかりませんでした。";
-            minGuaranteedAffinitySpan.textContent = "-";
-            return;
-        }
-
-        const result = results[0];
-        const combo = result.combination;
-        
-        multiCombinationInfo.textContent = `親①: ${combo.parent1} / 親②: ${combo.parent2}`;
-        minGuaranteedAffinitySpan.textContent = result.min_guaranteed_affinity.toFixed(2);
-        
-        const detailsList = document.createElement('ul');
-        detailsList.style.listStyleType = 'none';
-        detailsList.style.padding = '0';
-        
-        const children = Object.keys(result.children_details).sort(); // Fix: Changed combo.children_details to result.children_details
-        
-        children.forEach(child => {
-            const detail = result.children_details[child];
-            const listItem = document.createElement('li');
-            listItem.innerHTML = `
-                <img src="${staticImagesPath + child}.png" alt="${child}" style="width: 30px; height: 30px; vertical-align: middle;">
-                <strong>${child}</strong>: ${detail.affinity !== -1 ? detail.affinity.toFixed(2) : '-'}
-                (親①祖父: ${combo.grandpa1 || '-'}, 親①祖母: ${combo.grandma1 || '-'} |
-                親②祖父: ${combo.grandpa2 || '-'}, 親②祖母: ${combo.grandma2 || '-'})
-            `;
-            detailsList.appendChild(listItem);
-        });
-        
-        multiChildrenDetailsDiv.appendChild(detailsList);
+    if (results.length === 0) {
+        multiCombinationInfo.textContent = "条件に合う最高の組み合わせは見つかりませんでした。";
+        minGuaranteedAffinitySpan.textContent = "-";
+        return;
     }
+
+    const result = results[0];
+    const combo = result.combination;
+    
+    // 親と祖父母の情報をまとめて表示
+    const parent1Info = `親①: ${combo.parent1}${combo.grandpa1 || combo.grandma1 ? ` (祖父: ${combo.grandpa1 || '-'}, 祖母: ${combo.grandma1 || '-'})` : ''}`;
+    const parent2Info = `親②: ${combo.parent2}${combo.grandpa2 || combo.grandma2 ? ` (祖父: ${combo.grandpa2 || '-'}, 祖母: ${combo.grandma2 || '-'})` : ''}`;
+    
+    multiCombinationInfo.innerHTML = `${parent1Info}<br>${parent2Info}`;
+    minGuaranteedAffinitySpan.textContent = result.min_guaranteed_affinity.toFixed(2);
+    
+    // テーブルを作成して、モンスター名と相性値を揃える
+    const resultsTable = document.createElement('table');
+    resultsTable.style.width = 'auto';
+    resultsTable.style.margin = '10px auto';
+    resultsTable.style.borderCollapse = 'collapse';
+
+    const children = Object.keys(result.children_details).sort();
+    
+    children.forEach(child => {
+        const detail = result.children_details[child];
+        const row = resultsTable.insertRow();
+        
+        // モンスターアイコンと名前のセル
+        const childCell = row.insertCell();
+        childCell.style.padding = '5px';
+        childCell.style.whiteSpace = 'nowrap';
+        childCell.innerHTML = `<img src="${staticImagesPath + child}.png" alt="${child}" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 5px;"><strong>${child}</strong>:`;
+
+        // 相性値のセル
+        const affinityCell = row.insertCell();
+        affinityCell.style.padding = '5px';
+        affinityCell.textContent = detail.affinity !== -1 ? detail.affinity.toFixed(2) : '-';
+    });
+    
+    multiChildrenDetailsDiv.appendChild(resultsTable);
+}
 
 
     function displayParentSummary(results, exploringSlots) {
