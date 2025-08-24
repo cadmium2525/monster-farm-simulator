@@ -461,7 +461,7 @@ def explore_multi_combinations():
     is_fast_mode = len(explorable_bloodlines) >= 20 and any(s is None for s in [fixed_slots['parent1'], fixed_slots['parent2'], fixed_slots['grandpa1'], fixed_slots['grandma1'], fixed_slots['grandpa2'], fixed_slots['grandma2']])
     
     if is_fast_mode:
-        sample_size = 100000
+        sample_size = 250000
         print(f"空きスロットが多いため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
         sampled_combinations = [
             (random.choice(parent1_candidates), random.choice(grandpa1_candidates), random.choice(grandma1_candidates),
