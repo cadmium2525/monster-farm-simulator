@@ -1,14 +1,18 @@
 import pandas as pd
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, g
 import itertools
 import random
 from threading import Event
 from collections import defaultdict
+import heapq # 20250827改修
+import uuid # 20250827改修
 
 app = Flask(__name__)
 
 # 探索中止フラグ
 is_exploration_cancelled = Event()
+# 20250827改修: リクエストIDごとのキャンセル状態を管理する辞書
+cancellation_flags = {}
 
 # CSVファイルの読み込み (データ型を最適化)
 try:
@@ -158,6 +162,17 @@ def calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus):
         return a_val + b_val + c_val + fixed_bonus
     return -1
 
+@app.before_request # 20250827改修
+def before_request_func():
+    """リクエストごとに一意のIDを生成し、gオブジェクトに格納する。"""
+    g.request_id = str(uuid.uuid4())
+    cancellation_flags[g.request_id] = False
+
+@app.teardown_request # 20250827改修
+def teardown_request_func(exception=None):
+    """リクエスト終了時にキャンセル状態をクリーンアップする。"""
+    cancellation_flags.pop(g.get('request_id', None), None)
+
 @app.route('/')
 def index():
     main_bloodlines = sorted(part_affinity_df['child_bloodline'].cat.categories.tolist())
@@ -167,13 +182,17 @@ def index():
 
 @app.route('/cancel_exploration', methods=['POST'])
 def cancel_exploration():
-    print("--- 探索中止リクエストを受信しました ---")
-    is_exploration_cancelled.set()
-    return jsonify({"message": "Exploration cancellation requested."})
+    request_id_to_cancel = request.json.get('request_id') # 20250827改修
+    if request_id_to_cancel in cancellation_flags:
+        print(f"--- 探索中止リクエストを受信しました (Request ID: {request_id_to_cancel}) ---")
+        cancellation_flags[request_id_to_cancel] = True
+        return jsonify({"message": f"Exploration cancellation requested for {request_id_to_cancel}."})
+    return jsonify({"error": "Request ID not found or already completed."}), 404
+
 
 @app.route('/explore', methods=['POST'])
 def explore_combinations():
-    is_exploration_cancelled.clear()
+    request_id = g.request_id # 20250827改修
     data = request.json
     
     common_secret_iii = int(data.get('common_secret_iii', 0))
@@ -256,7 +275,7 @@ def explore_combinations():
         
         processed_count = 0
         for p1_cand, p2_cand in itertools.product(parent_candidates_p1, parent_candidates_p2):
-            if is_exploration_cancelled.is_set():
+            if cancellation_flags.get(request_id, False): # 20250827改修
                 return jsonify({"error": "探索が中止されました"}), 500
             
             c_val = get_c_value(p1_cand, p2_cand)
@@ -305,7 +324,10 @@ def explore_combinations():
 
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
-        summary_results_dict = {}
+        # 20250827改修: ヒープキューの導入
+        # (matches, max_affinity)のタプルを優先度として使用
+        # heapqは最小ヒープなので、-matches, -max_affinityとすることで最大ヒープを模倣
+        summary_heap = []
         
         slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
         candidate_lists = []
@@ -323,7 +345,7 @@ def explore_combinations():
         is_fast_mode = total_combinations > EXPLORATION_THRESHOLD
         
         if is_fast_mode:
-            sample_size = min(40000, total_combinations)
+            sample_size = min(35000, total_combinations)
             print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
             exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
         else:
@@ -332,7 +354,7 @@ def explore_combinations():
 
         processed_count = 0
         for combo in exploration_iterator:
-            if is_exploration_cancelled.is_set():
+            if cancellation_flags.get(g.request_id, False): # 20250827改修
                 return jsonify({"error": "探索が中止されました"}), 500
 
             p1, gp1, gm1, p2, gp2, gm2 = combo
@@ -352,40 +374,47 @@ def explore_combinations():
                         matched_children_count += 1
             
             if matched_children_count > 0:
-                summary_key = combo
-                summary_results_dict[summary_key] = {
-                    'combination': {
-                        'parent1': p1, 'grandpa1': gp1, 'grandma1': gm1,
-                        'parent2': p2, 'grandpa2': gp2, 'grandma2': gm2
-                    },
-                    'matches': matched_children_count,
-                    'max_affinity': max_affinity_for_combo
+                # 20250827改修: ヒープキューへの追加ロジック
+                combination_data = {
+                    'parent1': p1, 'grandpa1': gp1, 'grandma1': gm1,
+                    'parent2': p2, 'grandpa2': gp2, 'grandma2': gm2
                 }
+                
+                if len(summary_heap) < limit:
+                    heapq.heappush(summary_heap, (matched_children_count, max_affinity_for_combo, combination_data))
+                else:
+                    # 優先度が最も低い要素を取得
+                    lowest_priority_item = summary_heap[0]
+                    # 現在の組み合わせの優先度を計算
+                    current_priority = (matched_children_count, max_affinity_for_combo)
+                    # 現在の組み合わせがキューの最小値より大きい場合、最小値を置き換える
+                    if current_priority > (lowest_priority_item[0], lowest_priority_item[1]):
+                        heapq.heapreplace(summary_heap, (matched_children_count, max_affinity_for_combo, combination_data))
             
             processed_count += 1
             if processed_count % 1000 == 0:
                 print(f"  -> 組み合わせ候補を {processed_count} 件処理中...", end='\r')
 
-        final_summary_list = list(summary_results_dict.values())
-        final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'],), reverse=True)
-        
-        formatted_list = []
-        for res in final_summary_list:
-            formatted_list.append({
-                'parent_bloodline': " / ".join(list(res['combination'].values())),
-                'matches': res['matches'],
-                'max_affinity': res['max_affinity'],
-                'combination': res['combination']
+        # 20250827改修: ヒープキューから最終結果を取得
+        final_summary_list = []
+        while summary_heap:
+            matches, max_affinity, combination = heapq.heappop(summary_heap)
+            final_summary_list.append({
+                'parent_bloodline': " / ".join(list(combination.values())),
+                'matches': matches,
+                'max_affinity': max_affinity,
+                'combination': combination
             })
+        
+        final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'],), reverse=True)
             
         print(f"\n--- 探索完了（サマリー生成）---")
-        return jsonify(formatted_list[:limit])
+        return jsonify(final_summary_list) # limitはヒープのサイズで既に適用
 
 @app.route('/explore_multi', methods=['POST'])
 def explore_multi_combinations():
     print("--- マルチモード探索開始 ---")
-    is_exploration_cancelled.clear()
-
+    request_id = g.request_id # 20250827改修
     data = request.json
     
     common_secret_iii = int(data.get('common_secret_iii', 0))
@@ -431,7 +460,7 @@ def explore_multi_combinations():
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
-        sample_size = min(40000, total_calculations)
+        sample_size = min(35000, total_calculations)
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
         exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
     else:
@@ -439,7 +468,7 @@ def explore_multi_combinations():
         exploration_iterator = itertools.product(*candidate_lists)
 
     for combo in exploration_iterator:
-        if is_exploration_cancelled.is_set():
+        if cancellation_flags.get(g.request_id, False): # 20250827改修
             return jsonify({"error": "探索が中止されました"}), 500
 
         p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
