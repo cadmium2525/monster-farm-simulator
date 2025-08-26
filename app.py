@@ -168,7 +168,8 @@ def explore_combinations():
         else:
             return jsonify([])
 
-    # 親・祖父母は固定されているが、子が探索対象の場合の処理
+# 親・祖父母は固定されているが、子が探索対象の場合の処理
+    # (詳細情報を生成するロジック)
     fixed_parent_slots = [fixed_slots['parent1'], fixed_slots['parent2'], fixed_slots['grandpa1'], fixed_slots['grandma1'], fixed_slots['grandpa2'], fixed_slots['grandma2']]
     if fixed_slots['child'] is None and all(fixed_parent_slots) and len(exploring_slot_keys) == 1:
         print("--- 子のみが探索対象のため、詳細情報を生成します ---")
@@ -185,7 +186,8 @@ def explore_combinations():
         if c_val is None:
             return jsonify([])
         
-        for child_bloodline in explorable_bloodlines:
+        # 💡 修正箇所: explorable_bloodlinesではなく、all_bloodlinesをループ
+        for child_bloodline in all_bloodlines:
             if is_exploration_cancelled.is_set():
                 return jsonify({"error": "探索が中止されました"}), 500
             
@@ -430,17 +432,57 @@ def explore_combinations():
                     if total_affinity >= target_min:
                          summary_results[summary_key]['matched_children'].add(child_bloodline)
 
+# サマリー結果に最高相性値も格納
+        for summary_key, value in summary_results.items():
+            # max_affinityを計算する前にmatched_childrenをクリアする
+            # ※matchesの再計算のために必要
+            value['matched_children'] = set()
+            
+            max_affinity_in_combo = -1
+            
+            p1 = value['combination'].get('parent1')
+            p2 = value['combination'].get('parent2')
+            gp1 = value['combination'].get('grandpa1')
+            gm1 = value['combination'].get('grandma1')
+            gp2 = value['combination'].get('grandpa2')
+            gm2 = value['combination'].get('grandma2')
+            c_val = get_c_value(p1, p2)
+            
+            # 💡 修正箇所: ここでmatched_childrenではなく、すべての血統をループします
+            for child_bloodline in all_bloodlines:
+                a_val = part_affinity_lookup.get((p1, gp1, gm1, child_bloodline), None)
+                b_val = part_affinity_lookup.get((p2, gp2, gm2, child_bloodline), None)
+                
+                if a_val is not None and b_val is not None and c_val is not None:
+                    total_affinity = a_val + b_val + c_val + fixed_bonus
+                    
+                    # 目標達成数(matches)を再計算
+                    if total_affinity >= target_min:
+                        value['matched_children'].add(child_bloodline)
+                    
+                    # 最大相性値(max_affinity)を計算
+                    if total_affinity > max_affinity_in_combo:
+                        max_affinity_in_combo = total_affinity
+
+            # 新しいmatches数を更新
+            value['matches'] = len(value['matched_children'])
+            
+            # この行は正しいので変更なし
+            value['max_affinity'] = max_affinity_in_combo
+
         final_summary_list = []
         for key, value in summary_results.items():
             final_summary_list.append({
                 'parent_bloodline': " / ".join(value['combination'].values()),
                 'matches': len(value['matched_children']),
+                'max_affinity': value.get('max_affinity', -1),
                 'combination': value['combination']
             })
 
         print(f"\n--- 探索完了（サマリー生成）---")
-        final_summary_list.sort(key=lambda x: x['matches'], reverse=True)
-        return jsonify(final_summary_list[:limit]) 
+        # 修正：ソートキーに親の血統名を追加し、一意のソート順を保証
+        final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'], x['parent_bloodline']), reverse=True)
+        return jsonify(final_summary_list[:limit])
 
 @app.route('/explore_multi', methods=['POST'])
 def explore_multi_combinations():

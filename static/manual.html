@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>マニュアル</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; color: #333; }
+        h1 { border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+        h2 { color: #007bff; }
+        ul { list-style-type: disc; margin-left: 20px; }
+        .close-button-container { text-align: center; margin-top: 30px; }
+        .close-button { padding: 10px 20px; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .close-button:hover { background-color: #c82333; }
+    </style>
+</head>
+<body>
+
+    <h1>相性探索ツール マニュアル</h1>
+    <p>このツールは、指定したモンスターの条件から、最も相性の良いモンスターの組み合わせを探索します。</p>
+    
+    <hr>
+    
+    <h2>1. モード選択</h2>
+    <ul>
+        <li><strong>シングルモード</strong>: 特定の1体の「子モンスター」に対して、相性を最大化する親・祖父母の組み合わせを探します。</li>
+        <li><strong>マルチモード</strong>: 複数選択した「子モンスター」のすべてに対して、相性を<strong>最低限保証</strong>できる最高の組み合わせを探します。</li>
+    </ul>
+
+    <h2>2. 探索条件の設定</h2>
+    <ul>
+        <li><strong>共通秘伝の数</strong>: 最終相性値に加算されるボーナスを設定します。</li>
+        <li><strong>目標相性値</strong>: 探索結果の絞り込み基準となる相性値を設定します。シンボルか数値で指定できます。</li>
+        <li><strong>探索から除外するモンスター</strong>: 探索対象から除外したいモンスターを選択します。</li>
+        <li><strong>固定するモンスター</strong>: 特定のモンスターを固定し、空欄の枠のみを探索対象とします。</li>
+    </ul>
+
+    <h2>3. 探索結果</h2>
+    <ul>
+        <li><strong>子が固定されている場合</strong>: 最も相性値の高い組み合わせが1つ表示されます。</li>
+        <li><strong>子が固定されていない場合</strong>: 目標相性値を達成できる組み合わせが、達成した「子の数」順にリスト表示されます。リスト内の項目をクリックすると、詳細な相性値を確認できます。</li>
+    </ul>
+
+    <h2>4. 探索の中断</h2>
+    <p>探索に時間がかかっている場合は、「探索中止」ボタンでいつでも中断できます。</p>
+
+    <h2>5. ランダムサンプリングについて</h2>
+    <p>親・祖父母の入力欄が４つ以上空欄の場合、高速モードが適用される為精度が少し下がります。ご了承ください。</p>
+
+    <div class="close-button-container">
+        <button class="close-button" onclick="window.parent.closeManual()">閉じる</button>
+    </div>
+
+</body>
+</html>
