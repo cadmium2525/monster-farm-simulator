@@ -387,7 +387,7 @@ def explore_combinations():
         is_fast_mode = len(exploring_slot_keys) >= 4
         if is_fast_mode:
             print("空きスロットが4つ以上の為、高速モードで探索します。")
-            sample_size = 40000
+            sample_size = 35000
             sampled_combinations = [
                 tuple(random.choices(explorable_bloodlines, k=len(exploring_slot_keys)))
                 for _ in range(sample_size)
@@ -542,7 +542,7 @@ def explore_multi_combinations():
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
-        sample_size = min(40000, total_calculations)
+        sample_size = min(35000, total_calculations)
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
         exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
     else:

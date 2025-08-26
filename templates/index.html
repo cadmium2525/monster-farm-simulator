@@ -8,9 +8,12 @@
         .container { max-width: 900px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
         .input-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #fafafa; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
-        select, input[type="number"], input[type="text"] { width: 100%; padding: 15px; font-size: 16px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        select, input[type="number"], input[type="text"] { width: 100%; padding: 15px; font-size: 18px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
         button { padding: 8px 16px; background-color: #007bff; color: white; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; font-size: 14px; width: 100%; }
         button:hover { background-color: #0056b3; }
+button:active {
+    background-color: #0056b3; /* クリック時に少し暗い青色にする */
+}
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         .results-container { margin-top: 30px; }
         h2 { border-bottom: 2px solid #007bff; padding-bottom: 5px; color: #007bff; }
@@ -73,6 +76,7 @@
         .input-with-buttons button {
             padding: 18px 18px;
             margin: 0;
+            font-size: 16px; 
         }
         .target-affinity-container {
             display: flex;
@@ -268,7 +272,7 @@
 }
 
 #manual-button {
-    padding: 8px 16px;
+    padding: 8px 20px;
     background-color: #6c757d;
     color: white;
     border: none;
@@ -336,6 +340,7 @@
                     <label for="common_secret_iii">共通秘伝Ⅲの数:</label>
                     <div class="input-with-buttons">
                         <input type="number" id="common_secret_iii" name="common_secret_iii" value="0" min="0">
+                        <button type="button" onclick="incrementSecret('common_secret_iii', -5)">-5</button> 
                         <button type="button" onclick="incrementSecret('common_secret_iii', -1)">-1</button>
                         <button type="button" onclick="incrementSecret('common_secret_iii', 1)">+1</button>
                         <button type="button" onclick="incrementSecret('common_secret_iii', 5)">+5</button>
@@ -345,6 +350,7 @@
                     <label for="common_secret_ii">共通秘伝Ⅱの数:</label>
                     <div class="input-with-buttons">
                         <input type="number" id="common_secret_ii" name="common_secret_ii" value="0" min="0">
+                        <button type="button" onclick="incrementSecret('common_secret_ii', -5)">-5</button>
                         <button type="button" onclick="incrementSecret('common_secret_ii', -1)">-1</button>
                         <button type="button" onclick="incrementSecret('common_secret_ii', 1)">+1</button>
                         <button type="button" onclick="incrementSecret('common_secret_ii', 5)">+5</button>
@@ -352,7 +358,11 @@
                 </div>
                 <div class="input-group" id="limit-group">
                     <label for="limit">表示件数（上位）:</label>
+                    <div class="input-with-buttons">
                     <input type="number" id="limit" name="limit" value="50" min="1">
+                    <button type="button" onclick="incrementSecret('limit', -10)">-10</button>
+                    <button type="button" onclick="incrementSecret('limit', 10)">+10</button>
+                  </div>
                 </div>
                 <div class="input-group" id="target-affinity-group">
                     <label>目標相性値:</label>
