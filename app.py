@@ -29,7 +29,7 @@ try:
         monsters_by_category[row['モン類']].append(row['主血統'])
 
 except FileNotFoundError:
-    print("エラー: 必要なファイルが見つかりません。")
+    print("エラー: 必要なファイルが見つかりません。アプリケーションを終了します。")
     exit()
 
 # 目標相性値の辞書
@@ -55,13 +55,7 @@ part_c_lookup_asymmetric = part_c_df.set_index(['parent1_bloodline', 'parent2_bl
 part_c_df['sorted_parents'] = part_c_df.apply(lambda row: tuple(sorted((row['parent1_bloodline'], row['parent2_bloodline']))), axis=1)
 part_c_lookup_symmetric = part_c_df.set_index('sorted_parents').to_dict()['c_affinity']
 
-# C値を取得するヘルパー関数
-def get_c_value(p1, p2):
-    val = part_c_lookup_asymmetric.get((p1, p2))
-    if val is not None:
-        return val
-    return part_c_lookup_symmetric.get(tuple(sorted((p1, p2))))
-
+# B値とA値のルックアップ
 part_affinity_lookup = part_affinity_df.set_index(['parent_bloodline', 'grandpa_bloodline', 'grandma_bloodline', 'child_bloodline']).to_dict()['main_affinity']
 
 # 親と子から最適な祖父母を見つけるためのルックアップを事前に計算
@@ -72,6 +66,7 @@ for parent in all_bloodlines:
         max_affinity = -1
         best_gp = None
         best_gm = None
+        
         for gp, gm in itertools.product(all_bloodlines, repeat=2):
             affinity = part_affinity_lookup.get((parent, gp, gm, child), None)
             if affinity is not None and affinity > max_affinity:
@@ -81,6 +76,87 @@ for parent in all_bloodlines:
         best_ab_lookup[(parent, child)] = (max_affinity, best_gp, best_gm)
 
 print("--- ルックアップ辞書の構築が完了しました ---")
+
+# ヘルパー関数: C値を取得
+def get_c_value(p1, p2):
+    # 非対称辞書を優先して検索
+    val = part_c_lookup_asymmetric.get((p1, p2))
+    if val is not None:
+        return val
+    # 見つからなければ対称辞書を検索
+    return part_c_lookup_symmetric.get(tuple(sorted((p1, p2))))
+
+# ヘルパー関数: A値またはB値を取得 (祖父母の最適化も含む)
+def get_ab_value(parent, child, fixed_gp=None, fixed_gm=None, excluded_monsters=None):
+    if fixed_gp is not None and fixed_gm is not None:
+        return part_affinity_lookup.get((parent, fixed_gp, fixed_gm, child), -1), fixed_gp, fixed_gm
+    
+    base_ab_val, base_gp, base_gm = best_ab_lookup.get((parent, child), (None, None, None))
+    
+    if excluded_monsters and (base_gp in excluded_monsters or base_gm in excluded_monsters):
+        max_affinity = -1
+        best_gp = None
+        best_gm = None
+        explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
+        
+        if fixed_gp is not None:
+            for gm in explorable_bloodlines:
+                affinity = part_affinity_lookup.get((parent, fixed_gp, gm, child), None)
+                if affinity is not None and affinity > max_affinity:
+                    max_affinity = affinity
+                    best_gm = gm
+            return max_affinity, fixed_gp, best_gm
+            
+        elif fixed_gm is not None:
+            for gp in explorable_bloodlines:
+                affinity = part_affinity_lookup.get((parent, gp, fixed_gm, child), None)
+                if affinity is not None and affinity > max_affinity:
+                    max_affinity = affinity
+                    best_gp = gp
+            return max_affinity, best_gp, fixed_gm
+            
+        else:
+            for gp_new, gm_new in itertools.product(explorable_bloodlines, repeat=2):
+                affinity = part_affinity_lookup.get((parent, gp_new, gm_new, child), None)
+                if affinity is not None and affinity > max_affinity:
+                    max_affinity = affinity
+                    best_gp = gp_new
+                    best_gm = gm_new
+            return max_affinity, best_gp, best_gm
+            
+    else:
+        if fixed_gp is not None:
+            max_affinity = -1
+            best_gm = None
+            for gm in all_bloodlines:
+                affinity = part_affinity_lookup.get((parent, fixed_gp, gm, child), None)
+                if affinity is not None and affinity > max_affinity:
+                    max_affinity = affinity
+                    best_gm = gm
+            return max_affinity, fixed_gp, best_gm
+            
+        elif fixed_gm is not None:
+            max_affinity = -1
+            best_gp = None
+            for gp in all_bloodlines:
+                affinity = part_affinity_lookup.get((parent, gp, fixed_gm, child), None)
+                if affinity is not None and affinity > max_affinity:
+                    max_affinity = affinity
+                    best_gp = gp
+            return max_affinity, best_gp, fixed_gm
+            
+        else:
+            return base_ab_val if base_ab_val is not None else -1, base_gp, base_gm
+
+# ヘルパー関数: 総相性値を計算
+def calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus):
+    c_val = get_c_value(p1, p2)
+    a_val = part_affinity_lookup.get((p1, gp1, gm1, child), None)
+    b_val = part_affinity_lookup.get((p2, gp2, gm2, child), None)
+    
+    if c_val is not None and a_val is not None and b_val is not None:
+        return a_val + b_val + c_val + fixed_bonus
+    return -1
 
 @app.route('/')
 def index():
@@ -95,20 +171,9 @@ def cancel_exploration():
     is_exploration_cancelled.set()
     return jsonify({"message": "Exploration cancellation requested."})
 
-def calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus):
-    c_val = get_c_value(p1, p2)
-    a_val = part_affinity_lookup.get((p1, gp1, gm1, child), None)
-    b_val = part_affinity_lookup.get((p2, gp2, gm2, child), None)
-    
-    if c_val is not None and a_val is not None and b_val is not None:
-        return a_val + b_val + c_val + fixed_bonus
-    return -1
-
 @app.route('/explore', methods=['POST'])
 def explore_combinations():
-    print("--- シングルモード探索開始 ---")
     is_exploration_cancelled.clear()
-
     data = request.json
     
     common_secret_iii = int(data.get('common_secret_iii', 0))
@@ -139,217 +204,89 @@ def explore_combinations():
     else:
         target_min, _ = TARGET_AFFINITY_SCORES.get(target_symbol, (496, 614))
 
-    exploring_slot_keys = [key for key, value in fixed_slots.items() if value is None]
     all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
     explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
 
-    # すべてのスロットが固定されている場合の処理
-    if not exploring_slot_keys:
-        child = fixed_slots['child']
+    if not any(v is None for k, v in fixed_slots.items() if k != 'child'):
+        child = fixed_slots['child'] if fixed_slots['child'] else 'dummy'
         p1 = fixed_slots['parent1']
         p2 = fixed_slots['parent2']
         gp1 = fixed_slots['grandpa1']
         gm1 = fixed_slots['grandma1']
         gp2 = fixed_slots['grandpa2']
         gm2 = fixed_slots['grandma2']
+        
+        if not fixed_slots['child']:
+            print("--- 全ての親が固定されているため、サマリーを生成します ---")
+            summary_results = []
+            c_val = get_c_value(p1, p2)
+            if c_val is None:
+                return jsonify([])
 
-        total_affinity = calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus)
-
-        if total_affinity != -1:
-            result = {
-                'best_affinity': total_affinity,
-                'combination': {
-                    'child': child,
-                    'parent1': p1, 'grandpa1': gp1, 'grandma1': gm1,
-                    'parent2': p2, 'grandpa2': gp2, 'grandma2': gm2
-                }
-            }
-            return jsonify([result])
+            for child_bl in all_bloodlines:
+                total_affinity = calculate_affinity(child_bl, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus)
+                if total_affinity != -1:
+                    summary_results.append({
+                        'child_bloodline': child_bl,
+                        'total_affinity': total_affinity,
+                        'is_matched': total_affinity >= target_min
+                    })
+            summary_results.sort(key=lambda x: x['total_affinity'], reverse=True)
+            return jsonify(summary_results)
         else:
-            return jsonify([])
+            print("--- 全ての親と子が固定されているため、単一結果を返します ---")
+            total_affinity = calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus)
+            if total_affinity != -1:
+                return jsonify([{
+                    'best_affinity': total_affinity,
+                    'combination': fixed_slots
+                }])
+            else:
+                return jsonify([])
 
-# 親・祖父母は固定されているが、子が探索対象の場合の処理
-    # (詳細情報を生成するロジック)
-    fixed_parent_slots = [fixed_slots['parent1'], fixed_slots['parent2'], fixed_slots['grandpa1'], fixed_slots['grandma1'], fixed_slots['grandpa2'], fixed_slots['grandma2']]
-    if fixed_slots['child'] is None and all(fixed_parent_slots) and len(exploring_slot_keys) == 1:
-        print("--- 子のみが探索対象のため、詳細情報を生成します ---")
-        detailed_results = []
-        
-        p1 = fixed_slots['parent1']
-        p2 = fixed_slots['parent2']
-        gp1 = fixed_slots['grandpa1']
-        gm1 = fixed_slots['grandma1']
-        gp2 = fixed_slots['grandpa2']
-        gm2 = fixed_slots['grandma2']
-        
-        c_val = get_c_value(p1, p2)
-        if c_val is None:
-            return jsonify([])
-        
-        # 💡 修正箇所: explorable_bloodlinesではなく、all_bloodlinesをループ
-        for child_bloodline in all_bloodlines:
-            if is_exploration_cancelled.is_set():
-                return jsonify({"error": "探索が中止されました"}), 500
-            
-            a_val = part_affinity_lookup.get((p1, gp1, gm1, child_bloodline), None)
-            b_val = part_affinity_lookup.get((p2, gp2, gm2, child_bloodline), None)
-            
-            total_affinity = 0
-            if a_val is not None and b_val is not None:
-                total_affinity = a_val + b_val + c_val + fixed_bonus
-            
-            detailed_results.append({
-                'child_bloodline': child_bloodline,
-                'total_affinity': total_affinity if total_affinity > 0 else None
-            })
-        
-        return jsonify(detailed_results)
-
-    # ここから改善されたアルゴリズム (子指定あり)
     if fixed_slots['child']:
         print("--- 子が指定されているため、ヒューリスティック探索を実行します ---")
         best_affinity = -1
         best_combination = None
         
         child_bl = fixed_slots['child']
-
-        if fixed_slots['parent1'] is not None and fixed_slots['parent2'] is not None:
-            p1_cand = fixed_slots['parent1']
-            p2_cand = fixed_slots['parent2']
+        
+        parent_candidates_p1 = [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines
+        parent_candidates_p2 = [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
+        
+        processed_count = 0
+        for p1_cand, p2_cand in itertools.product(parent_candidates_p1, parent_candidates_p2):
+            if is_exploration_cancelled.is_set():
+                return jsonify({"error": "探索が中止されました"}), 500
+            
             c_val = get_c_value(p1_cand, p2_cand)
             if c_val is None:
-                return jsonify([])
-            c_candidates = [((p1_cand, p2_cand), c_val)]
-        else:
-            c_candidates = part_c_df.set_index(['parent1_bloodline', 'parent2_bloodline']).to_dict()['c_affinity'].items()
+                continue
+
+            best_a_val, best_gp1, best_gm1 = get_ab_value(
+                parent=p1_cand,
+                child=child_bl,
+                fixed_gp=fixed_slots['grandpa1'],
+                fixed_gm=fixed_slots['grandma1'],
+                excluded_monsters=excluded_monsters
+            )
             
-        processed_count = 0
-        for (p1_cand, p2_cand), c_val in c_candidates:
-            if is_exploration_cancelled.is_set():
-                print("--- 探索が中断されました ---")
-                return jsonify({"error": "探索が中止されました"}), 500
-
-            if fixed_slots['parent1'] is not None and p1_cand != fixed_slots['parent1']:
-                continue
-            if fixed_slots['parent2'] is not None and p2_cand != fixed_slots['parent2']:
-                continue
-                
-            if p1_cand in excluded_monsters or p2_cand in excluded_monsters:
-                continue
-
-            best_a_val = -1
-            best_b_val = -1
+            best_b_val, best_gp2, best_gm2 = get_ab_value(
+                parent=p2_cand,
+                child=child_bl,
+                fixed_gp=fixed_slots['grandpa2'],
+                fixed_gm=fixed_slots['grandma2'],
+                excluded_monsters=excluded_monsters
+            )
             
-            # --- ここから修正 ---
-            # parent1の祖父母を探索
-            if fixed_slots['grandpa1'] and fixed_slots['grandma1']:
-                best_gp1 = fixed_slots['grandpa1']
-                best_gm1 = fixed_slots['grandma1']
-                a_val = part_affinity_lookup.get((p1_cand, best_gp1, best_gm1, child_bl), None)
-                best_a_val = a_val if a_val is not None else -1
-            elif fixed_slots['grandpa1']:
-                best_gp1 = fixed_slots['grandpa1']
-                best_gm1 = None
-                max_affinity = -1
-                for gm in explorable_bloodlines:
-                    affinity = part_affinity_lookup.get((p1_cand, best_gp1, gm, child_bl), None)
-                    if affinity is not None and affinity > max_affinity:
-                        max_affinity = affinity
-                        best_gm1 = gm
-                best_a_val = max_affinity
-            elif fixed_slots['grandma1']:
-                best_gp1 = None
-                best_gm1 = fixed_slots['grandma1']
-                max_affinity = -1
-                for gp in explorable_bloodlines:
-                    affinity = part_affinity_lookup.get((p1_cand, gp, best_gm1, child_bl), None)
-                    if affinity is not None and affinity > max_affinity:
-                        max_affinity = affinity
-                        best_gp1 = gp
-                best_a_val = max_affinity
-            else:
-                # 既存のルックアップテーブルから取得
-                a_val, gp1_cand, gm1_cand = best_ab_lookup.get((p1_cand, child_bl), (None, None, None))
-                # ルックアップテーブルの祖父母が除外リストに含まれていないか確認
-                if gp1_cand in excluded_monsters or gm1_cand in excluded_monsters:
-                    # 除外されていた場合、除外リストを考慮して再探索
-                    max_affinity = -1
-                    best_gp1 = None
-                    best_gm1 = None
-                    for gp_new, gm_new in itertools.product(explorable_bloodlines, repeat=2):
-                        affinity = part_affinity_lookup.get((p1_cand, gp_new, gm_new, child_bl), None)
-                        if affinity is not None and affinity > max_affinity:
-                            max_affinity = affinity
-                            best_gp1 = gp_new
-                            best_gm1 = gm_new
-                    best_a_val = max_affinity
-                else:
-                    # 除外されていなければそのまま使用
-                    best_a_val = a_val if a_val is not None else -1
-                    best_gp1 = gp1_cand
-                    best_gm1 = gm1_cand
-                
-            # parent2の祖父母を探索
-            if fixed_slots['grandpa2'] and fixed_slots['grandma2']:
-                best_gp2 = fixed_slots['grandpa2']
-                best_gm2 = fixed_slots['grandma2']
-                b_val = part_affinity_lookup.get((p2_cand, best_gp2, best_gm2, child_bl), None)
-                best_b_val = b_val if b_val is not None else -1
-            elif fixed_slots['grandpa2']:
-                best_gp2 = fixed_slots['grandpa2']
-                best_gm2 = None
-                max_affinity = -1
-                for gm in explorable_bloodlines:
-                    affinity = part_affinity_lookup.get((p2_cand, best_gp2, gm, child_bl), None)
-                    if affinity is not None and affinity > max_affinity:
-                        max_affinity = affinity
-                        best_gm2 = gm
-                best_b_val = max_affinity
-            elif fixed_slots['grandma2']:
-                best_gp2 = None
-                best_gm2 = fixed_slots['grandma2']
-                max_affinity = -1
-                for gp in explorable_bloodlines:
-                    affinity = part_affinity_lookup.get((p2_cand, gp, best_gm2, child_bl), None)
-                    if affinity is not None and affinity > max_affinity:
-                        max_affinity = affinity
-                        best_gp2 = gp
-                best_b_val = max_affinity
-            else:
-                # 既存のルックアップテーブルから取得
-                b_val, gp2_cand, gm2_cand = best_ab_lookup.get((p2_cand, child_bl), (None, None, None))
-                # ルックアップテーブルの祖父母が除外リストに含まれていないか確認
-                if gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
-                    # 除外されていた場合、除外リストを考慮して再探索
-                    max_affinity = -1
-                    best_gp2 = None
-                    best_gm2 = None
-                    for gp_new, gm_new in itertools.product(explorable_bloodlines, repeat=2):
-                        affinity = part_affinity_lookup.get((p2_cand, gp_new, gm_new, child_bl), None)
-                        if affinity is not None and affinity > max_affinity:
-                            max_affinity = affinity
-                            best_gp2 = gp_new
-                            best_gm2 = gm_new
-                    best_b_val = max_affinity
-                else:
-                    # 除外されていなければそのまま使用
-                    best_b_val = b_val if b_val is not None else -1
-                    best_gp2 = gp2_cand
-                    best_gm2 = gm2_cand
-            # --- 修正ここまで ---
-
             if best_a_val != -1 and best_b_val != -1:
                 total_affinity = best_a_val + best_b_val + c_val + fixed_bonus
-                
                 if total_affinity > best_affinity:
                     best_affinity = total_affinity
                     best_combination = {
-                        'parent1': p1_cand,
-                        'grandpa1': best_gp1,
-                        'grandma1': best_gm1,
-                        'parent2': p2_cand,
-                        'grandpa2': best_gp2,
-                        'grandma2': best_gm2
+                        'child': child_bl,
+                        'parent1': p1_cand, 'grandpa1': best_gp1, 'grandma1': best_gm1,
+                        'parent2': p2_cand, 'grandpa2': best_gp2, 'grandma2': best_gm2
                     }
             
             processed_count += 1
@@ -358,10 +295,9 @@ def explore_combinations():
 
         print("\n--- ヒューリスティック探索完了 ---")
         if best_combination:
-            result_combination = {key: value for key, value in best_combination.items()}
             result = {
                 'best_affinity': best_affinity,
-                'combination': result_combination
+                'combination': best_combination
             }
             return jsonify([result])
         else:
@@ -369,120 +305,81 @@ def explore_combinations():
 
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
-        summary_results = {}
-        exploring_slot_keys = [key for key, value in fixed_slots.items() if value is None and key != 'child']
-        all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
-        explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
+        summary_results_dict = {}
+        
+        slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
+        candidate_lists = []
+        for slot in slot_names:
+            if fixed_slots[slot]:
+                candidate_lists.append([fixed_slots[slot]])
+            else:
+                candidate_lists.append(explorable_bloodlines)
 
-        C_AFFINITY_THRESHOLD = 0.90
-        top_c_threshold = part_c_df['c_affinity'].quantile(C_AFFINITY_THRESHOLD)
-        part_c_lookup_for_summary = part_c_df[part_c_df['c_affinity'] >= top_c_threshold].set_index(['parent1_bloodline', 'parent2_bloodline']).to_dict()['c_affinity']
-    
-        if not exploring_slot_keys:
-            return jsonify([])
-    
-        exploration_space = [explorable_bloodlines] * len(exploring_slot_keys)
-        all_exploring_combinations = itertools.product(*exploration_space)
-    
-        is_fast_mode = len(exploring_slot_keys) >= 4
+        total_combinations = 1
+        for cand_list in candidate_lists:
+            total_combinations *= len(cand_list)
+        
+        EXPLORATION_THRESHOLD = 1000000
+        is_fast_mode = total_combinations > EXPLORATION_THRESHOLD
+        
         if is_fast_mode:
-            print("空きスロットが4つ以上の為、高速モードで探索します。")
-            sample_size = 35000
-            sampled_combinations = [
-                tuple(random.choices(explorable_bloodlines, k=len(exploring_slot_keys)))
-                for _ in range(sample_size)
-            ]
-            all_exploring_combinations = sampled_combinations
-            
+            sample_size = min(40000, total_combinations)
+            print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
+            exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
+        else:
+            print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) 以内のため、網羅的探索を実行します。")
+            exploration_iterator = itertools.product(*candidate_lists)
+
         processed_count = 0
-        for combo in all_exploring_combinations:
+        for combo in exploration_iterator:
             if is_exploration_cancelled.is_set():
-                print("--- 探索が中断されました ---")
                 return jsonify({"error": "探索が中止されました"}), 500
 
-            current_fixed_slots = fixed_slots.copy()
-            for i, key in enumerate(exploring_slot_keys):
-                current_fixed_slots[key] = combo[i]
-            
-            p1 = current_fixed_slots['parent1']
-            p2 = current_fixed_slots['parent2']
-    
-            if not p1 or not p2: continue
+            p1, gp1, gm1, p2, gp2, gm2 = combo
             
             c_val = get_c_value(p1, p2)
             if c_val is None: continue
             
-            combo_parts = [current_fixed_slots[key] for key in exploring_slot_keys]
-            summary_key = tuple(combo_parts)
+            max_affinity_for_combo = -1
+            matched_children_count = 0
             
-            if summary_key not in summary_results:
-                summary_results[summary_key] = {'combination': {}, 'matched_children': set()}
-                for i, key in enumerate(exploring_slot_keys):
-                    summary_results[summary_key]['combination'][key] = combo[i]
-
-            processed_count += 1
-            print(f"  -> 処理中: {processed_count}件目の組み合わせ...", end='\r')
-
-            for child_bloodline in all_bloodlines:
-                a_val = part_affinity_lookup.get((p1, current_fixed_slots['grandpa1'], current_fixed_slots['grandma1'], child_bloodline), None)
-                b_val = part_affinity_lookup.get((p2, current_fixed_slots['grandpa2'], current_fixed_slots['grandma2'], child_bloodline), None)
-    
-                if a_val is not None and b_val is not None:
-                    total_affinity = a_val + b_val + c_val + fixed_bonus
-                    if total_affinity >= target_min:
-                         summary_results[summary_key]['matched_children'].add(child_bloodline)
-
-# サマリー結果に最高相性値も格納
-        for summary_key, value in summary_results.items():
-            # max_affinityを計算する前にmatched_childrenをクリアする
-            # ※matchesの再計算のために必要
-            value['matched_children'] = set()
-            
-            max_affinity_in_combo = -1
-            
-            p1 = value['combination'].get('parent1')
-            p2 = value['combination'].get('parent2')
-            gp1 = value['combination'].get('grandpa1')
-            gm1 = value['combination'].get('grandma1')
-            gp2 = value['combination'].get('grandpa2')
-            gm2 = value['combination'].get('grandma2')
-            c_val = get_c_value(p1, p2)
-            
-            # 💡 修正箇所: ここでmatched_childrenではなく、すべての血統をループします
-            for child_bloodline in all_bloodlines:
-                a_val = part_affinity_lookup.get((p1, gp1, gm1, child_bloodline), None)
-                b_val = part_affinity_lookup.get((p2, gp2, gm2, child_bloodline), None)
+            for child_bl in all_bloodlines:
+                total_affinity = calculate_affinity(child_bl, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus)
                 
-                if a_val is not None and b_val is not None and c_val is not None:
-                    total_affinity = a_val + b_val + c_val + fixed_bonus
-                    
-                    # 目標達成数(matches)を再計算
+                if total_affinity != -1:
+                    max_affinity_for_combo = max(max_affinity_for_combo, total_affinity)
                     if total_affinity >= target_min:
-                        value['matched_children'].add(child_bloodline)
-                    
-                    # 最大相性値(max_affinity)を計算
-                    if total_affinity > max_affinity_in_combo:
-                        max_affinity_in_combo = total_affinity
-
-            # 新しいmatches数を更新
-            value['matches'] = len(value['matched_children'])
+                        matched_children_count += 1
             
-            # この行は正しいので変更なし
-            value['max_affinity'] = max_affinity_in_combo
+            if matched_children_count > 0:
+                summary_key = combo
+                summary_results_dict[summary_key] = {
+                    'combination': {
+                        'parent1': p1, 'grandpa1': gp1, 'grandma1': gm1,
+                        'parent2': p2, 'grandpa2': gp2, 'grandma2': gm2
+                    },
+                    'matches': matched_children_count,
+                    'max_affinity': max_affinity_for_combo
+                }
+            
+            processed_count += 1
+            if processed_count % 1000 == 0:
+                print(f"  -> 組み合わせ候補を {processed_count} 件処理中...", end='\r')
 
-        final_summary_list = []
-        for key, value in summary_results.items():
-            final_summary_list.append({
-                'parent_bloodline': " / ".join(value['combination'].values()),
-                'matches': len(value['matched_children']),
-                'max_affinity': value.get('max_affinity', -1),
-                'combination': value['combination']
+        final_summary_list = list(summary_results_dict.values())
+        final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'],), reverse=True)
+        
+        formatted_list = []
+        for res in final_summary_list:
+            formatted_list.append({
+                'parent_bloodline': " / ".join(list(res['combination'].values())),
+                'matches': res['matches'],
+                'max_affinity': res['max_affinity'],
+                'combination': res['combination']
             })
-
+            
         print(f"\n--- 探索完了（サマリー生成）---")
-        # 修正：ソートキーに親の血統名を追加し、一意のソート順を保証
-        final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'], x['parent_bloodline']), reverse=True)
-        return jsonify(final_summary_list[:limit])
+        return jsonify(formatted_list[:limit])
 
 @app.route('/explore_multi', methods=['POST'])
 def explore_multi_combinations():
@@ -514,27 +411,19 @@ def explore_multi_combinations():
     all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
     explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
 
-    # 選択肢のフィルタリング
-    candidate_lists = []
     slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
-    
+    candidate_lists = []
     for slot in slot_names:
-        if fixed_slots[slot] is not None:
+        if fixed_slots[slot]:
             candidate_lists.append([fixed_slots[slot]])
         else:
             candidate_lists.append(explorable_bloodlines)
             
-    # 親の組み合わせを重複なく生成するための工夫
-    parent_cand_lists = [
-        [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines,
-        [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
-    ]
-
     best_min_affinity = -1
     best_combination = None
     processed_count = 0
-    total_calculations = 1
     
+    total_calculations = 1
     for cand_list in candidate_lists:
         total_calculations *= len(cand_list)
 
@@ -542,7 +431,7 @@ def explore_multi_combinations():
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
-        sample_size = min(35000, total_calculations)
+        sample_size = min(40000, total_calculations)
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
         exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
     else:
@@ -551,7 +440,6 @@ def explore_multi_combinations():
 
     for combo in exploration_iterator:
         if is_exploration_cancelled.is_set():
-            print("--- 探索が中断されました ---")
             return jsonify({"error": "探索が中止されました"}), 500
 
         p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
@@ -600,7 +488,6 @@ def explore_multi_combinations():
 
     print("\n--- マルチモード探索完了 ---")
     if best_combination:
-        # 詳細情報も再計算して格納
         all_children_affinities = {}
         for child_bl in selected_children:
             total_affinity = calculate_affinity(
@@ -630,7 +517,6 @@ def get_details():
      
     common_secret_iii = int(data.get('common_secret_iii', 0))
     common_secret_ii = int(data.get('common_secret_ii', 0))
-    excluded_monsters = set(data.get('excluded_monsters', []))
      
     fixed_slots = {
         'parent1': data.get('parent1', None),
@@ -672,6 +558,6 @@ def get_details():
  
     print(f"--- 詳細情報取得完了 ---")
     return jsonify(detailed_results)
-
+    
 if __name__ == '__main__':
     app.run(debug=True)
