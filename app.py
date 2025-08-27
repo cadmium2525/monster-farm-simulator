@@ -447,7 +447,7 @@ def explore_combinations():
 @app.route('/explore_multi', methods=['POST'])
 def explore_multi_combinations():
     print("--- マルチモード探索開始 ---")
-    request_id = g.request_id # 20250827改修
+    request_id = g.request_id
     data = request.json
     
     common_secret_iii = int(data.get('common_secret_iii', 0))
@@ -501,15 +501,16 @@ def explore_multi_combinations():
         exploration_iterator = itertools.product(*candidate_lists)
 
     for combo in exploration_iterator:
-        if cancellation_flags.get(g.request_id, False): # 20250827改修
+        if cancellation_flags.get(g.request_id, False):
             return jsonify({"error": "探索が中止されました"}), 500
 
         p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
 
-        if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
-           gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
-           gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
-            continue
+        # 修正箇所: ここでの除外モンスターチェックを削除
+        # if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
+        #    gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
+        #    gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
+        #     continue
 
         c_val = get_c_value(p1_cand, p2_cand)
         if c_val is None:
