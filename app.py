@@ -192,7 +192,7 @@ def cancel_exploration():
 
 @app.route('/explore', methods=['POST'])
 def explore_combinations():
-    request_id = g.request_id # 20250827改修
+    request_id = g.request_id
     data = request.json
     
     common_secret_iii = int(data.get('common_secret_iii', 0))
@@ -275,7 +275,7 @@ def explore_combinations():
         
         processed_count = 0
         for p1_cand, p2_cand in itertools.product(parent_candidates_p1, parent_candidates_p2):
-            if cancellation_flags.get(request_id, False): # 20250827改修
+            if cancellation_flags.get(request_id, False):
                 return jsonify({"error": "探索が中止されました"}), 500
             
             c_val = get_c_value(p1_cand, p2_cand)
@@ -324,96 +324,125 @@ def explore_combinations():
 
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
-        # 20250827改修: ヒープキューの導入と修正
-        summary_heap = []
         
-        slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
-        candidate_lists = []
-        for slot in slot_names:
-            if fixed_slots[slot]:
-                candidate_lists.append([fixed_slots[slot]])
-            else:
-                candidate_lists.append(explorable_bloodlines)
-
-        total_combinations = 1
-        for cand_list in candidate_lists:
-            total_combinations *= len(cand_list)
+        # 候補リストの準備
+        p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines
+        gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else explorable_bloodlines
+        gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else explorable_bloodlines
+        p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
+        gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else explorable_bloodlines
+        gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else explorable_bloodlines
         
-        EXPLORATION_THRESHOLD = 1000000
+        total_combinations = len(p1_candidates) * len(gp1_candidates) * len(gm1_candidates) * len(p2_candidates) * len(gp2_candidates) * len(gm2_candidates)
+        
+        EXPLORATION_THRESHOLD = 1_000_000
         is_fast_mode = total_combinations > EXPLORATION_THRESHOLD
+
+        final_summary_list = [] # 網羅的探索用
+        summary_heap = [] # 高速モード用
         
         if is_fast_mode:
             sample_size = min(35000, total_combinations)
             print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
-            exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
+            exploration_iterator = (
+                (
+                    random.choice(p1_candidates),
+                    random.choice(gp1_candidates),
+                    random.choice(gm1_candidates),
+                    random.choice(p2_candidates),
+                    random.choice(gp2_candidates),
+                    random.choice(gm2_candidates)
+                ) for _ in range(sample_size)
+            )
         else:
             print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) 以内のため、網羅的探索を実行します。")
-            exploration_iterator = itertools.product(*candidate_lists)
+            exploration_iterator = itertools.product(p1_candidates, gp1_candidates, gm1_candidates, p2_candidates, gp2_candidates, gm2_candidates)
 
         processed_count = 0
         for combo in exploration_iterator:
-            if cancellation_flags.get(g.request_id, False): # 20250827改修
+            if cancellation_flags.get(g.request_id, False):
                 return jsonify({"error": "探索が中止されました"}), 500
 
             p1, gp1, gm1, p2, gp2, gm2 = combo
             
+            # 除外モンスターのチェック
+            if p1 in excluded_monsters or p2 in excluded_monsters or \
+               gp1 in excluded_monsters or gm1 in excluded_monsters or \
+               gp2 in excluded_monsters or gm2 in excluded_monsters:
+                continue
+
             c_val = get_c_value(p1, p2)
             if c_val is None: continue
             
             max_affinity_for_combo = -1
             matched_children_count = 0
-            
-            for child_bl in all_bloodlines:
-                total_affinity = calculate_affinity(child_bl, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus)
+
+            # 全血統に対して目標相性値を超える子の数をカウント
+            for child_bl in all_bloodlines: # explorable_bloodlines ではなく all_bloodlines を使用
+                # ここで除外モンスターのチェックは行わない（matched_children_count に含めるため）
+                # 除外されたモンスターは探索対象ではないが、計算対象には含める
                 
-                if total_affinity != -1:
+                a_val = part_affinity_lookup.get((p1, gp1, gm1, child_bl), -1)
+                b_val = part_affinity_lookup.get((p2, gp2, gm2, child_bl), -1)
+                
+                if a_val != -1 and b_val != -1:
+                    total_affinity = a_val + b_val + c_val + fixed_bonus
                     max_affinity_for_combo = max(max_affinity_for_combo, total_affinity)
                     if total_affinity >= target_min:
                         matched_children_count += 1
             
-            # 20250827改修: matched_children_count >= 0 の条件
-            if matched_children_count >= 0:
+            if max_affinity_for_combo != -1:
                 combination_data = {
                     'parent1': p1, 'grandpa1': gp1, 'grandma1': gm1,
                     'parent2': p2, 'grandpa2': gp2, 'grandma2': gm2
                 }
                 
-                # 優先度として (matched_children_count, max_affinity_for_combo) を使用
-                priority = (-matched_children_count, -max_affinity_for_combo)
-                
-                # 辞書同士の比較を避けるため、優先度タプルとデータ本体を分けて格納する
-                # 同一優先度の場合の比較エラーを避けるため、一意なIDを追加
-                if len(summary_heap) < limit:
-                    heapq.heappush(summary_heap, (priority, uuid.uuid4(), combination_data))
+                if is_fast_mode:
+                    priority = (-matched_children_count, -max_affinity_for_combo) 
+                    if len(summary_heap) < limit:
+                        heapq.heappush(summary_heap, (priority, uuid.uuid4(), combination_data))
+                    else:
+                        current_priority = (-matched_children_count, -max_affinity_for_combo)
+                        lowest_priority_tuple = summary_heap[0]
+                        lowest_priority = lowest_priority_tuple[0]
+                        if current_priority < lowest_priority:
+                            heapq.heapreplace(summary_heap, (current_priority, uuid.uuid4(), combination_data))
                 else:
-                    # 現在の組み合わせの優先度が、ヒープ内の最小値より高い場合、置き換える
-                    # 比較はpriorityタプルのみで行う
-                    current_priority = (-matched_children_count, -max_affinity_for_combo)
-                    lowest_priority_tuple = summary_heap[0]
-                    lowest_priority = lowest_priority_tuple[0] # ここで最初の要素（priorityタプル）のみを取得
-                    if current_priority < lowest_priority:
-                        heapq.heapreplace(summary_heap, (current_priority, uuid.uuid4(), combination_data))
+                    # 網羅的探索の場合は直接リストに追加
+                    final_summary_list.append({
+                        'parent_bloodline': " / ".join(list(combination_data.values())),
+                        'matches': matched_children_count,
+                        'max_affinity': max_affinity_for_combo,
+                        'combination': combination_data
+                    })
             
             processed_count += 1
             if processed_count % 1000 == 0:
                 print(f"  -> 組み合わせ候補を {processed_count} 件処理中...", end='\r')
 
-        # 20250827改修: ヒープキューから最終結果を取得
-        final_summary_list = []
-        while summary_heap:
-            # 3番目の要素に辞書が格納されている
-            priority, _, combination = heapq.heappop(summary_heap)
-            final_summary_list.append({
-                'parent_bloodline': " / ".join(list(combination.values())),
-                'matches': -priority[0],
-                'max_affinity': -priority[1],
-                'combination': combination
-            })
-        
-        final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'],), reverse=True)
-            
+        # 結果の処理
+        if is_fast_mode:
+            temp_list = []
+            while summary_heap:
+                priority, _, combination = heapq.heappop(summary_heap)
+                temp_list.append({
+                    'parent_bloodline': " / ".join(list(combination.values())),
+                    'matches': -priority[0],
+                    'max_affinity': -priority[1],
+                    'combination': combination
+                })
+            # 高速モードの結果も同じソート順にする
+            temp_list.sort(key=lambda x: (x['matches'], x['max_affinity']), reverse=True)
+            final_summary_list = temp_list
+        else:
+            # 網羅的探索の結果は直接ソート
+            final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity']), reverse=True)
+            final_summary_list = final_summary_list[:limit] # limitを適用
+
         print(f"\n--- 探索完了（サマリー生成）---")
         return jsonify(final_summary_list)
+
+
 
 @app.route('/explore_multi', methods=['POST'])
 def explore_multi_combinations():
