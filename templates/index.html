@@ -18,9 +18,37 @@ button:active {
         .results-container { margin-top: 30px; }
         h2 { border-bottom: 2px solid #007bff; padding-bottom: 5px; color: #007bff; }
         .results-section { margin-bottom: 30px; }
-        .results-summary table, .detailed-results table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-        .results-summary th, .results-summary td, .detailed-results th, .detailed-results td { border: 1px solid #ccc; padding: 12px; text-align: left; }
-        .results-summary th, .detailed-results th { background-color: #f2f2f2; font-weight: bold; }
+/* 💡 最終修正版: テーブル関連のスタイル */
+.results-summary table, .detailed-results table, #parent-summary-table {
+    width: 100%;
+    border-collapse: collapse; /* セルの境界線をまとめる */
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* サマリーテーブルのセルに下線を適用 */
+.results-summary th, .results-summary td, #parent-summary-table th, #parent-summary-table td {
+    border-bottom: 1px solid #ccc;
+    padding: 12px;
+    text-align: left;
+}
+
+/* 最後の行の下線は非表示に */
+.results-summary tr:last-child th,
+.results-summary tr:last-child td,
+#parent-summary-table tr:last-child th,
+#parent-summary-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* 詳細表示のテーブルには下線を適用しない */
+.detailed-results th, .detailed-results td {
+    border: none;
+    padding: 12px;
+    text-align: left;
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
         .results-summary tr:hover { background-color: #f9f9f9; cursor: pointer; }
         .fixed-monster-group { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
         .fixed-monster-group > div { flex: 1 1 45%; }
@@ -121,6 +149,7 @@ button:active {
             border-radius: 8px;
             width: 90%;
             max-width: 700px;
+            max-height: 70vh;
         }
         .close-button {
             color: #aaa;
@@ -187,13 +216,14 @@ button:active {
             text-align: center;
         }
 
+
         /* 💡 スピナー表示とボタンサイズの修正 */
         .loading-animation {
             border: 4px solid rgba(0, 0, 0, 0.1);
             border-left-color: #007bff;
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
             display: inline-block;
             vertical-align: middle;
@@ -244,8 +274,8 @@ button:active {
         }
         .monster-category-buttons button {
             flex-grow: 1;
-            padding: 8px 12px;
-            font-size: 12px;
+            padding: 18px 20px;
+            font-size: 18px;
             background-color: #e9ecef;
             color: #333;
             border: 1px solid #ccc;
@@ -262,8 +292,8 @@ button:active {
             margin-bottom: 10px;
         }
         #selected-children-container .monster-icon {
-            width: 50px;
-            height: 50px;
+            width: 80px;
+            height: 80px;
             border: 2px solid #007bff;
         }
 #clear-selected-button {
@@ -277,7 +307,7 @@ button:active {
 }
 
 #confirm-button {
-    padding: 12px 60px; /* 上下左右の余白を調整してボタンを大きくします */
+    padding: 18px 80px; /* 上下左右の余白を調整してボタンを大きくします */
 }
 
 .manual-button-container {
@@ -292,7 +322,7 @@ button:active {
     border: none;
     border-radius: 12px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 18px;
 }
 
 #manual-button:hover {
@@ -373,7 +403,7 @@ button:active {
                 <div class="input-group" id="limit-group">
                     <label for="limit">表示件数（上位）:</label>
                     <div class="input-with-buttons">
-                    <input type="number" id="limit" name="limit" value="50" min="1">
+                    <input type="number" id="limit" name="limit" value="20" min="1">
                     <button type="button" class="limit-btn" onclick="incrementSecret('limit', -10)">-10</button>
                     <button type="button" class="limit-btn" onclick="incrementSecret('limit', 10)">+10</button>
                   </div>
@@ -478,7 +508,7 @@ button:active {
             </div>
 
             <div id="multi-mode-result-section" class="results-section" style="display: none;">
-                <h3>最高の最低保証相性値を持つ組み合わせ</h3>
+                <h3>選択した各子モンスターとの相性最低値が最大となる組み合わせ</h3>
                 <div id="multi-mode-result" class="best-combination-result">
                     <p id="multi-combination-info">...</p>
                     <p>最低保証相性値: <span id="min-guaranteed-affinity" class="highlight"></span></p>
@@ -492,8 +522,8 @@ button:active {
                 <table id="parent-summary-table" style="margin: auto;">
                     <thead>
                         <tr>
-                            <th>候補モンスター</th>
-                            <th>目標達成組み合わせ数</th>
+                            <th>候補一覧</th>
+                            <th>目標相性値達成数</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -865,26 +895,30 @@ button:active {
         });
     });
 
-    function displayBestCombination(results) {
-        bestCombinationSection.style.display = 'block';
-        if (results.length === 0) {
-            bestCombinationInfo.textContent = "条件に合う最高の組み合わせは見つかりませんでした。";
-            bestAffinitySpan.textContent = "-";
-        } else {
-            const result = results[0];
-              const sortedSlots = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2'];
-              const displayNames = sortedSlots.filter(slot => result.combination.hasOwnProperty(slot)).map(slot => {
-                  const name = result.combination[slot];
-                  const displayName = {
-                      'parent1': '親①', 'grandpa1': '親①祖父', 'grandma1': '親①祖母',
-                      'parent2': '親②', 'grandpa2': '親②祖父', 'grandma2': '親②祖母'
-                  }[slot];
-                  return `${displayName}: ${name}`;
-              }).join(' / ');
-            bestCombinationInfo.textContent = `子: ${form.child.value} / ${displayNames}`;
-            bestAffinitySpan.textContent = result.best_affinity.toFixed(2);
-        }
+function displayBestCombination(results) {
+    bestCombinationSection.style.display = 'block';
+    if (results.length === 0) {
+        bestCombinationInfo.textContent = "条件に合う最高の組み合わせは見つかりませんでした。";
+        bestAffinitySpan.textContent = "-";
+    } else {
+        const result = results[0];
+        const combo = result.combination;
+
+        // 親①とその祖父母の情報を生成
+        const parent1Line = `親①: ${combo.parent1 || '-'} / 祖父: ${combo.grandpa1 || '-'} / 祖母: ${combo.grandma1 || '-'}`;
+
+        // 親②とその祖父母の情報を生成
+        const parent2Line = `親②: ${combo.parent2 || '-'} / 祖父: ${combo.grandpa2 || '-'} / 祖母: ${combo.grandma2 || '-'}`;
+
+        // 複数行をHTMLで結合して表示
+        bestCombinationInfo.innerHTML = `
+            <p>子: ${form.child.value}</p>
+            <p>${parent1Line}</p>
+            <p>${parent2Line}</p>
+        `;
+        bestAffinitySpan.textContent = result.best_affinity.toFixed(2);
     }
+}
     
 function displayMultiModeResult(results) {
     multiModeResultSection.style.display = 'block';
@@ -900,8 +934,8 @@ function displayMultiModeResult(results) {
     const combo = result.combination;
     
     // 親と祖父母の情報をまとめて表示
-    const parent1Info = `親①: ${combo.parent1}${combo.grandpa1 || combo.grandma1 ? ` (祖父: ${combo.grandpa1 || '-'}, 祖母: ${combo.grandma1 || '-'})` : ''}`;
-    const parent2Info = `親②: ${combo.parent2}${combo.grandpa2 || combo.grandma2 ? ` (祖父: ${combo.grandpa2 || '-'}, 祖母: ${combo.grandma2 || '-'})` : ''}`;
+    const parent1Info = `親①: ${combo.parent1}${combo.grandpa1 || combo.grandma1 ? ` / 祖父: ${combo.grandpa1 || '-'} / 祖母: ${combo.grandma1 || '-'}` : ''}`;
+    const parent2Info = `親②: ${combo.parent2}${combo.grandpa2 || combo.grandma2 ? ` / 祖父: ${combo.grandpa2 || '-'} / 祖母: ${combo.grandma2 || '-'}` : ''}`;
     
     multiCombinationInfo.innerHTML = `${parent1Info}<br>${parent2Info}`;
     minGuaranteedAffinitySpan.textContent = result.min_guaranteed_affinity.toFixed(2);
@@ -990,7 +1024,6 @@ function displayMultiModeResult(results) {
                     data[key] = result.combination[key];
                 }
 
-                loadingMessage.style.display = 'flex';
                 
                 fetch('/get_details', {
                     method: 'POST',
@@ -1045,11 +1078,6 @@ function displayMultiModeResult(results) {
         const detailRow = document.createElement('tr');
         const detailCell = document.createElement('td');
         detailCell.colSpan = 2;
-
-        const parentInfo = document.createElement('p');
-        parentInfo.innerHTML = `**親①**: ${selectedParent1 || '未選択'} / **親②**: ${selectedParent2 || '未選択'}`;
-        parentInfo.style.fontWeight = 'bold';
-        detailCell.appendChild(parentInfo);
 
         const table = document.createElement('table');
         const thead = table.createTHead();
