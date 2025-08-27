@@ -324,9 +324,7 @@ def explore_combinations():
 
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
-        # 20250827改修: ヒープキューの導入
-        # (matches, max_affinity)のタプルを優先度として使用
-        # heapqは最小ヒープなので、-matches, -max_affinityとすることで最大ヒープを模倣
+        # 20250827改修: ヒープキューの導入と修正
         summary_heap = []
         
         slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
@@ -373,23 +371,28 @@ def explore_combinations():
                     if total_affinity >= target_min:
                         matched_children_count += 1
             
-            if matched_children_count > 0:
-                # 20250827改修: ヒープキューへの追加ロジック
+            # 20250827改修: matched_children_count >= 0 の条件
+            if matched_children_count >= 0:
                 combination_data = {
                     'parent1': p1, 'grandpa1': gp1, 'grandma1': gm1,
                     'parent2': p2, 'grandpa2': gp2, 'grandma2': gm2
                 }
                 
+                # 優先度として (matched_children_count, max_affinity_for_combo) を使用
+                priority = (-matched_children_count, -max_affinity_for_combo)
+                
+                # 辞書同士の比較を避けるため、優先度タプルとデータ本体を分けて格納する
+                # 同一優先度の場合の比較エラーを避けるため、一意なIDを追加
                 if len(summary_heap) < limit:
-                    heapq.heappush(summary_heap, (matched_children_count, max_affinity_for_combo, combination_data))
+                    heapq.heappush(summary_heap, (priority, uuid.uuid4(), combination_data))
                 else:
-                    # 優先度が最も低い要素を取得
-                    lowest_priority_item = summary_heap[0]
-                    # 現在の組み合わせの優先度を計算
-                    current_priority = (matched_children_count, max_affinity_for_combo)
-                    # 現在の組み合わせがキューの最小値より大きい場合、最小値を置き換える
-                    if current_priority > (lowest_priority_item[0], lowest_priority_item[1]):
-                        heapq.heapreplace(summary_heap, (matched_children_count, max_affinity_for_combo, combination_data))
+                    # 現在の組み合わせの優先度が、ヒープ内の最小値より高い場合、置き換える
+                    # 比較はpriorityタプルのみで行う
+                    current_priority = (-matched_children_count, -max_affinity_for_combo)
+                    lowest_priority_tuple = summary_heap[0]
+                    lowest_priority = lowest_priority_tuple[0] # ここで最初の要素（priorityタプル）のみを取得
+                    if current_priority < lowest_priority:
+                        heapq.heapreplace(summary_heap, (current_priority, uuid.uuid4(), combination_data))
             
             processed_count += 1
             if processed_count % 1000 == 0:
@@ -398,18 +401,19 @@ def explore_combinations():
         # 20250827改修: ヒープキューから最終結果を取得
         final_summary_list = []
         while summary_heap:
-            matches, max_affinity, combination = heapq.heappop(summary_heap)
+            # 3番目の要素に辞書が格納されている
+            priority, _, combination = heapq.heappop(summary_heap)
             final_summary_list.append({
                 'parent_bloodline': " / ".join(list(combination.values())),
-                'matches': matches,
-                'max_affinity': max_affinity,
+                'matches': -priority[0],
+                'max_affinity': -priority[1],
                 'combination': combination
             })
         
         final_summary_list.sort(key=lambda x: (x['matches'], x['max_affinity'],), reverse=True)
             
         print(f"\n--- 探索完了（サマリー生成）---")
-        return jsonify(final_summary_list) # limitはヒープのサイズで既に適用
+        return jsonify(final_summary_list)
 
 @app.route('/explore_multi', methods=['POST'])
 def explore_multi_combinations():
