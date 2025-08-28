@@ -798,102 +798,119 @@ button:active {
     }
 
 
-    form.addEventListener('submit', function(event) {
-        event.preventDefault();
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-        toggleForm(true);
+    toggleForm(true);
 
-        parentSummarySection.style.display = 'none';
-        bestCombinationSection.style.display = 'none';
-        multiModeResultSection.style.display = 'none';
-        childDetailsSection.style.display = 'none';
-        if (currentDetailRow) {
-            currentDetailRow.remove();
-            currentDetailRow = null;
-        }
+    parentSummarySection.style.display = 'none';
+    bestCombinationSection.style.display = 'none';
+    multiModeResultSection.style.display = 'none';
+    childDetailsSection.style.display = 'none';
+    if (currentDetailRow) {
+        currentDetailRow.remove();
+        currentDetailRow = null;
+    }
 
-        currentRequestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-        
-        const data = {};
-        if (explorationMode === 'single') {
-            fixedSlots.forEach(slot => {
+    // 💡 修正点: クライアント側でrequestIdを生成する処理を削除
+    currentRequestId = crypto.randomUUID();
+
+    const data = {};
+    if (explorationMode === 'single') {
+        fixedSlots.forEach(slot => {
+            data[slot] = form[slot].value || null;
+        });
+    } else {
+        fixedSlots.forEach(slot => {
+            if (slot !== 'child') {
                 data[slot] = form[slot].value || null;
-            });
-        } else {
-            fixedSlots.forEach(slot => {
-                if (slot !== 'child') {
-                    data[slot] = form[slot].value || null;
-                }
-            });
-            data.selected_children = Array.from(selectedChildren);
-        }
+            }
+        });
+        data.selected_children = Array.from(selectedChildren);
+    }
 
-        data.common_secret_iii = form.common_secret_iii.value;
-        data.common_secret_ii = form.common_secret_ii.value;
-        data.target_symbol = form.target_symbol.value;
-        data.target_affinity_value = form.target_affinity_value.value;
-        data.limit = form.limit.value;
-        data.excluded_monsters = getExcludedMonsters();
-        data.request_id = currentRequestId;
-        
-        const endpoint = explorationMode === 'single' ? '/explore' : '/explore_multi';
+    data.common_secret_iii = form.common_secret_iii.value;
+    data.common_secret_ii = form.common_secret_ii.value;
+    data.target_symbol = form.target_symbol.value;
+    data.target_affinity_value = form.target_affinity_value.value;
+    data.limit = form.limit.value;
+    data.excluded_monsters = getExcludedMonsters();
+    
+    // 💡 修正点: requestIdはサーバーのレスポンスから取得するため、ここでは含めない
+    data.request_id = currentRequestId;
+    const endpoint = explorationMode === 'single' ? '/explore' : '/explore_multi';
 
-        fetch(endpoint, {
+    try {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
-        })
-        .then(response => {
-            if (!response.ok) {
-                return response.json().then(err => { throw new Error(err.error); });
-            }
-            return response.json();
-        })
-        .then(results => {
-            toggleForm(false);
-            
-            if (explorationMode === 'multi') {
-                displayMultiModeResult(results);
-            }
-            // サーバーのレスポンス形式をチェック
-            else if (results.length > 0 && results[0].hasOwnProperty('child_bloodline')) {
-                displayChildDetails(results, data.parent1, data.parent2);
-            }
-            else if (data.child) {
-                displayBestCombination(results);
-            } 
-            else {
-                displayParentSummary(results, fixedSlots.filter(slot => form[slot].value === '' && slot !== 'child'));
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            toggleForm(false);
-            if (error.message !== '探索が中止されました') {
-                alert(error.message || "探索中にエラーが発生しました。");
-            }
         });
-    });
 
-    cancelButton.addEventListener('click', function() {
-        if (!currentRequestId) return;
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error);
+        }
+
+        const result = await response.json();
         
-        console.log("探索中止ボタンがクリックされました。");
-        fetch('/cancel_exploration', {
+        const results = result.results;
+
+        toggleForm(false);
+        
+        if (explorationMode === 'multi') {
+            displayMultiModeResult(results);
+        }
+        else if (results.length > 0 && results[0].hasOwnProperty('child_bloodline')) {
+            displayChildDetails(results, data.parent1, data.parent2);
+        }
+        else if (data.child) {
+            displayBestCombination(results);
+        }
+        else {
+            displayParentSummary(results, fixedSlots.filter(slot => form[slot].value === '' && slot !== 'child'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        toggleForm(false);
+        if (error.message !== '探索が中止されました') {
+            alert(error.message || "探索中にエラーが発生しました。");
+        }
+    }
+});
+
+cancelButton.addEventListener('click', async () => {
+    console.log("探索中止ボタンがクリックされました。");
+    
+    // 💡 修正点: サーバーが生成したrequestIdが格納されているか確認する
+    if (!currentRequestId) {
+        alert("キャンセルする探索が見つかりません。");
+        return;
+    }
+    
+    try {
+        const response = await fetch('/cancel_exploration', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ request_id: currentRequestId }),
-        })
-        .then(() => {
-            toggleForm(false);
-            alert("探索が中止されました。");
-        })
-        .catch(error => {
-            console.error('キャンセルリクエスト送信エラー:', error);
-            toggleForm(false);
-            alert("キャンセルリクエストの送信中にエラーが発生しました。");
         });
-    });
+        
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error);
+        }
+
+        toggleForm(false);
+        alert("探索が中止されました。");
+    } catch (error) {
+        console.error('キャンセルリクエスト送信エラー:', error);
+        toggleForm(false);
+        alert(error.message || "キャンセルリクエストの送信中にエラーが発生しました。");
+    } finally {
+        // 💡 修正点: キャンセル後はrequestIdをリセットして、再探索に備える
+        currentRequestId = null;
+    }
+});
 
 function displayBestCombination(results) {
     bestCombinationSection.style.display = 'block';
