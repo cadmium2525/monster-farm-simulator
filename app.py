@@ -192,15 +192,8 @@ def cancel_exploration():
 
 @app.route('/explore', methods=['POST'])
 def explore_combinations():
-
+    request_id = g.request_id
     data = request.json
-    request_id = data.get('request_id')
-
-    if not request_id:
-        return jsonify({"error": "Request ID is missing."}), 400
-
-    cancellation_flags[request_id] = False
-
     
     common_secret_iii = int(data.get('common_secret_iii', 0))
     common_secret_ii = int(data.get('common_secret_ii', 0))
@@ -262,15 +255,13 @@ def explore_combinations():
         else:
             print("--- 全ての親と子が固定されているため、単一結果を返します ---")
             total_affinity = calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus)
-# ... 探索結果を生成...
             if total_affinity != -1:
-                result = {
+                return jsonify([{
                     'best_affinity': total_affinity,
                     'combination': fixed_slots
-                }
-                return jsonify({"results": [result], "requestId": request_id})
+                }])
             else:
-                return jsonify({"results": [], "requestId": request_id})
+                return jsonify([])
 
     if fixed_slots['child']:
         print("--- 子が指定されているため、ヒューリスティック探索を実行します ---")
@@ -284,9 +275,8 @@ def explore_combinations():
         
         processed_count = 0
         for p1_cand, p2_cand in itertools.product(parent_candidates_p1, parent_candidates_p2):
-
             if cancellation_flags.get(request_id, False):
-                return jsonify({"error": "探索が中止されました", "requestId": request_id}), 500
+                return jsonify({"error": "探索が中止されました"}), 500
             
             c_val = get_c_value(p1_cand, p2_cand)
             if c_val is None:
@@ -323,15 +313,14 @@ def explore_combinations():
                 print(f"  -> 親ペア候補を {processed_count} 件処理中...", end='\r')
 
         print("\n--- ヒューリスティック探索完了 ---")
-# ... 最高の組み合わせを探索...
         if best_combination:
             result = {
                 'best_affinity': best_affinity,
                 'combination': best_combination
             }
-            return jsonify({"results": [result], "requestId": request_id})
+            return jsonify([result])
         else:
-            return jsonify({"results": [], "requestId": request_id})
+            return jsonify([])
 
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
@@ -371,9 +360,8 @@ def explore_combinations():
 
         processed_count = 0
         for combo in exploration_iterator:
-# ... キャンセルフラグをチェック ...
             if cancellation_flags.get(g.request_id, False):
-                return jsonify({"error": "探索が中止されました", "requestId": request_id}), 500
+                return jsonify({"error": "探索が中止されました"}), 500
 
             p1, gp1, gm1, p2, gp2, gm2 = combo
             
@@ -452,7 +440,7 @@ def explore_combinations():
             final_summary_list = final_summary_list[:limit] # limitを適用
 
         print(f"\n--- 探索完了（サマリー生成）---")
-    return jsonify({"results": final_summary_list, "requestId": request_id})
+        return jsonify(final_summary_list)
 
 
 
@@ -512,42 +500,50 @@ def explore_multi_combinations():
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) 以内のため、網羅的探索を実行します。")
         exploration_iterator = itertools.product(*candidate_lists)
 
-        for combo in exploration_iterator:
-            # 💡 修正点: g.request_id を request_id に変更
-            if cancellation_flags.get(request_id, False):
-                return jsonify({"error": "探索が中止されました", "requestId": request_id}), 500
+    for combo in exploration_iterator:
+        if cancellation_flags.get(g.request_id, False):
+            return jsonify({"error": "探索が中止されました"}), 500
 
-            # 💡 修正点: ここから下のすべての行を正しくインデント
-            p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
+        p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
 
-            c_val = get_c_value(p1_cand, p2_cand)
-            if c_val is None:
-                continue
-                
-            min_affinity_for_this_combo = float('inf')
-            valid_combo = True
+        # 修正箇所: ここでの除外モンスターチェックを削除
+        # if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
+        #    gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
+        #    gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
+        #     continue
+
+        c_val = get_c_value(p1_cand, p2_cand)
+        if c_val is None:
+            continue
+        
+        min_affinity_for_this_combo = float('inf')
+        valid_combo = True
+        
+        for child_bl in selected_children:
+            total_affinity = calculate_affinity(
+                child_bl,
+                p1_cand, p2_cand,
+                gp1_cand, gm1_cand,
+                gp2_cand, gm2_cand,
+                fixed_bonus
+            )
             
-            for child_bl in selected_children:
-                total_affinity = calculate_affinity(...)
-                # ...
-                if total_affinity != -1:
-                    min_affinity_for_this_combo = min(min_affinity_for_this_combo, total_affinity)
-                else:
-                    valid_combo = False
-                    break
-            
-            # 💡 修正点: このif文のインデントを正しく調整
-            if valid_combo and min_affinity_for_this_combo > best_min_affinity:
-                best_min_affinity = min_affinity_for_this_combo
-                best_combination = {
-                    'parent1': p1_cand,
-                    'grandpa1': gp1_cand,
-                    'grandma1': gm1_cand,
-                    'parent2': p2_cand,
-                    'grandpa2': gp2_cand,
-                    'grandma2': gm2_cand
-                }
-
+            if total_affinity != -1:
+                min_affinity_for_this_combo = min(min_affinity_for_this_combo, total_affinity)
+            else:
+                valid_combo = False
+                break
+        
+        if valid_combo and min_affinity_for_this_combo > best_min_affinity:
+            best_min_affinity = min_affinity_for_this_combo
+            best_combination = {
+                'parent1': p1_cand,
+                'grandpa1': gp1_cand,
+                'grandma1': gm1_cand,
+                'parent2': p2_cand,
+                'grandpa2': gp2_cand,
+                'grandma2': gm2_cand
+            }
 
         processed_count += 1
         if processed_count % 1000 == 0:
