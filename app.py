@@ -499,7 +499,7 @@ def explore_multi_combinations():
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
-        sample_size = min(350000, total_calculations)
+        sample_size = min(35000, total_calculations)
         # 20250829改修: C値の高い親ペアを優先したサンプリング
         top_c_pairs_count = min(100, len(sorted_c_pairs) // 10)
         top_c_pairs = sorted_c_pairs[:top_c_pairs_count]
