@@ -4,8 +4,8 @@ import itertools
 import random
 from threading import Event
 from collections import defaultdict
-import heapq # 20250827改修
-import uuid # 20250827改修
+import heapq
+import uuid
 
 app = Flask(__name__)
 
@@ -58,6 +58,9 @@ part_c_lookup_asymmetric = part_c_df.set_index(['parent1_bloodline', 'parent2_bl
 # 対称辞書 (ソート済み)
 part_c_df['sorted_parents'] = part_c_df.apply(lambda row: tuple(sorted((row['parent1_bloodline'], row['parent2_bloodline']))), axis=1)
 part_c_lookup_symmetric = part_c_df.set_index('sorted_parents').to_dict()['c_affinity']
+
+# 20250829改修: C値を高い順にソートした親ペアリストを事前構築
+sorted_c_pairs = part_c_df.sort_values('c_affinity', ascending=False)[['parent1_bloodline', 'parent2_bloodline']].values.tolist()
 
 # B値とA値のルックアップ
 part_affinity_lookup = part_affinity_df.set_index(['parent_bloodline', 'grandpa_bloodline', 'grandma_bloodline', 'child_bloodline']).to_dict()['main_affinity']
@@ -162,13 +165,13 @@ def calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus):
         return a_val + b_val + c_val + fixed_bonus
     return -1
 
-@app.before_request # 20250827改修
+@app.before_request
 def before_request_func():
     """リクエストごとに一意のIDを生成し、gオブジェクトに格納する。"""
     g.request_id = str(uuid.uuid4())
     cancellation_flags[g.request_id] = False
 
-@app.teardown_request # 20250827改修
+@app.teardown_request
 def teardown_request_func(exception=None):
     """リクエスト終了時にキャンセル状態をクリーンアップする。"""
     cancellation_flags.pop(g.get('request_id', None), None)
@@ -182,7 +185,7 @@ def index():
 
 @app.route('/cancel_exploration', methods=['POST'])
 def cancel_exploration():
-    request_id_to_cancel = request.json.get('request_id') # 20250827改修
+    request_id_to_cancel = request.json.get('request_id')
     if request_id_to_cancel in cancellation_flags:
         print(f"--- 探索中止リクエストを受信しました (Request ID: {request_id_to_cancel}) ---")
         cancellation_flags[request_id_to_cancel] = True
@@ -341,18 +344,24 @@ def explore_combinations():
         final_summary_list = [] # 網羅的探索用
         summary_heap = [] # 高速モード用
         
+        # 20250829改修: 高速モードの探索ロジックを改善
         if is_fast_mode:
             sample_size = min(35000, total_combinations)
-            print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
+            # C値が高い上位の親ペアを抽出 (上位1000件、または全件数の10%のいずれか少ない方)
+            top_c_pairs_count = min(1000, len(sorted_c_pairs) // 10)
+            top_c_pairs = sorted_c_pairs[:top_c_pairs_count]
+            print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、C値上位 {top_c_pairs_count} 件の親ペアと高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
+            
+            # 探索イテレータをC値上位ペアとランダム祖父母の組み合わせに変更
             exploration_iterator = (
                 (
-                    random.choice(p1_candidates),
+                    parent_pair[0],
                     random.choice(gp1_candidates),
                     random.choice(gm1_candidates),
-                    random.choice(p2_candidates),
+                    parent_pair[1],
                     random.choice(gp2_candidates),
                     random.choice(gm2_candidates)
-                ) for _ in range(sample_size)
+                ) for parent_pair in random.choices(top_c_pairs, k=sample_size)
             )
         else:
             print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) 以内のため、網羅的探索を実行します。")
@@ -362,7 +371,7 @@ def explore_combinations():
         for combo in exploration_iterator:
             if cancellation_flags.get(g.request_id, False):
                 return jsonify({"error": "探索が中止されました"}), 500
-
+            
             p1, gp1, gm1, p2, gp2, gm2 = combo
             
             # 除外モンスターのチェック
@@ -378,10 +387,7 @@ def explore_combinations():
             matched_children_count = 0
 
             # 全血統に対して目標相性値を超える子の数をカウント
-            for child_bl in all_bloodlines: # explorable_bloodlines ではなく all_bloodlines を使用
-                # ここで除外モンスターのチェックは行わない（matched_children_count に含めるため）
-                # 除外されたモンスターは探索対象ではないが、計算対象には含める
-                
+            for child_bl in all_bloodlines:
                 a_val = part_affinity_lookup.get((p1, gp1, gm1, child_bl), -1)
                 b_val = part_affinity_lookup.get((p2, gp2, gm2, child_bl), -1)
                 
@@ -493,9 +499,22 @@ def explore_multi_combinations():
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
-        sample_size = min(35000, total_calculations)
-        print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
-        exploration_iterator = (tuple(random.choice(candidate_lists[i]) for i in range(len(slot_names))) for _ in range(sample_size))
+        sample_size = min(350000, total_calculations)
+        # 20250829改修: C値の高い親ペアを優先したサンプリング
+        top_c_pairs_count = min(100, len(sorted_c_pairs) // 10)
+        top_c_pairs = sorted_c_pairs[:top_c_pairs_count]
+        print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、C値上位 {top_c_pairs_count} 件の親ペアと高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
+        exploration_iterator = (
+            (
+                parent_pair[0],
+                random.choice(candidate_lists[1]),
+                random.choice(candidate_lists[2]),
+                parent_pair[1],
+                random.choice(candidate_lists[4]),
+                random.choice(candidate_lists[5])
+            ) for parent_pair in random.choices(top_c_pairs, k=sample_size)
+        )
+
     else:
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) 以内のため、網羅的探索を実行します。")
         exploration_iterator = itertools.product(*candidate_lists)
@@ -506,11 +525,11 @@ def explore_multi_combinations():
 
         p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
 
-        # 修正箇所: ここでの除外モンスターチェックを削除
-        # if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
-        #    gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
-        #    gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
-        #     continue
+        # 修正箇所: ここで除外モンスターのチェックを再度追加
+        if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
+           gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
+           gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
+            continue
 
         c_val = get_c_value(p1_cand, p2_cand)
         if c_val is None:
