@@ -3,363 +3,345 @@
 <head>
     <meta charset="UTF-8">
     <title>相性探索ツール</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
-        .container { max-width: 900px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
-        .input-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #fafafa; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        select, input[type="number"], input[type="text"] { width: 100%; padding: 15px; font-size: 20px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { padding: 8px 16px; background-color: #007bff; color: white; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; font-size: 14px; width: 100%; }
-        button:hover { background-color: #0056b3; }
-button:active {
-    background-color: #0056b3; /* クリック時に少し暗い青色にする */
-}
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        .results-container { margin-top: 30px; }
-        h2 { border-bottom: 2px solid #007bff; padding-bottom: 5px; color: #007bff; }
-        .results-section { margin-bottom: 30px; }
-/* 💡 最終修正版: テーブル関連のスタイル */
-.results-summary table, .detailed-results table, #parent-summary-table {
-    width: 100%;
-    border-collapse: collapse; /* セルの境界線をまとめる */
-    margin-top: 10px;
-    font-size: 14px;
-}
+<style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+    .container { max-width: 900px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+    .input-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #fafafa; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    select, input[type="number"], input[type="text"] { width: 100%; padding: 15px; font-size: 20px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+    button { padding: 8px 16px; background-color: #007bff; color: white; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; font-size: 14px; width: 100%; }
+    button:hover { background-color: #0056b3; }
+    button:active {
+        background-color: #0056b3;
+    }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    .results-container { margin-top: 30px; }
+    h2 { border-bottom: 2px solid #007bff; padding-bottom: 5px; color: #007bff; }
+    .results-section { margin-bottom: 30px; }
+    .results-summary table, .detailed-results table, #parent-summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 14px;
+    }
+    .results-summary th, .results-summary td, #parent-summary-table th, #parent-summary-table td {
+        border-bottom: 1px solid #ccc;
+        padding: 12px;
+        text-align: left;
+    }
+    .results-summary tr:last-child th,
+    .results-summary tr:last-child td,
+    #parent-summary-table tr:last-child th,
+    #parent-summary-table tr:last-child td {
+        border-bottom: none;
+    }
+    .detailed-results th, .detailed-results td {
+        border: none;
+        padding: 12px;
+        text-align: left;
+        background-color: #f2f2f2;
+        font-weight: bold;
+    }
+    .results-summary tr:hover { background-color: #f9f9f9; cursor: pointer; }
+    .fixed-monster-group { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+    .fixed-monster-group > div { flex: 1 1 45%; }
+    .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; display: none; }
+    .loading-message { text-align: center; margin-top: 20px; display: none; }
+    
+    /* レスポンシブデザイン */
+    @media (max-width: 768px) {
+        .container { padding: 10px; }
+        .fixed-monster-group { flex-direction: column; }
+        .fixed-monster-group > div { flex: none; width: 100%; }
+        .results-summary table, .detailed-results table { font-size: 12px; }
 
-/* サマリーテーブルのセルに下線を適用 */
-.results-summary th, .results-summary td, #parent-summary-table th, #parent-summary-table td {
-    border-bottom: 1px solid #ccc;
-    padding: 12px;
-    text-align: left;
-}
-
-/* 最後の行の下線は非表示に */
-.results-summary tr:last-child th,
-.results-summary tr:last-child td,
-#parent-summary-table tr:last-child th,
-#parent-summary-table tr:last-child td {
-    border-bottom: none;
-}
-
-/* 詳細表示のテーブルには下線を適用しない */
-.detailed-results th, .detailed-results td {
-    border: none;
-    padding: 12px;
-    text-align: left;
-    background-color: #f2f2f2;
-    font-weight: bold;
-}
-        .results-summary tr:hover { background-color: #f9f9f9; cursor: pointer; }
-        .fixed-monster-group { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
-        .fixed-monster-group > div { flex: 1 1 45%; }
-        .alert { padding: 10px; margin-bottom: 15px; border-radius: 4px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; display: none; }
-        .loading-message { text-align: center; margin-top: 20px; display: none; }
-        
-        /* レスポンシブデザイン */
-        @media (max-width: 768px) {
-            .container { padding: 10px; }
-            .fixed-monster-group { flex-direction: column; }
-            .fixed-monster-group > div { flex: none; width: 100%; }
-            .results-summary table, .detailed-results table { font-size: 12px; }
-        }
-        
-        @media (max-width: 480px) {
-            .results-summary th, .results-summary td, .detailed-results th, .detailed-results td { padding: 8px; }
-            .input-with-buttons button { padding: 6px 10px; }
-        }
-        
-        /* 元のHTMLのスタイルを復元 */
-        .best-combination-result {
-            padding: 20px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            text-align: center;
-            font-size: 1.2em;
-        }
-        .best-combination-result h3 {
-            margin-top: 0;
-            color: #0056b3;
-        }
-        .best-combination-result p {
-            margin: 5px 0;
-        }
-        .highlight {
-            font-weight: bold;
-            color: #d9534f;
-            font-size: 1.5em;
-        }
-        .button-group {
-            display: flex;
-            gap: 10px;
-        }
-        .input-with-buttons {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .input-with-buttons input {
-            flex-grow: 1;
-        }
-
-/* 共通秘伝ボタンのスタイル */
-.secret-btn {
-    width: 100px; /* 例として固定幅を設定 */
-    align-items: stretch;
-    font-size: 18px;
-    padding: 20px 0; /* 垂直方向の余白を調整 */
-}
-
-/* 表示件数ボタンのスタイル */
-.limit-btn {
-    width: 208px; /* こちらは少し幅を広げる */
-    align-items: stretch;
-    font-size: 18px;
-    padding: 20px 0;
-}
-
+        /* 💡 修正: 目標相性値のコンテナを縦並びに */
         .target-affinity-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-direction: column;
+            align-items: stretch;
         }
         .target-affinity-container select,
         .target-affinity-container input {
-            width: auto;
-            flex-grow: 1;
-        }
-
-        /* モンスター選択ポップアップのスタイル */
-        .monster-selector-modal {
-            display: none;
-            position: fixed;
-            z-index: 10;
-            left: 0;
-            top: 0;
             width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.8);
-            padding-top: 50px;
-        }
-        .modal-content {
-            background-color: #fff;
-            margin: auto;
-            padding: 20px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 700px;
-            max-height: 70vh;
-        }
-        .close-button {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-        }
-        .close-button:hover,
-        .close-button:focus {
-            color: #000;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .monster-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-            gap: 10px;
-            margin-top: 15px;
-        }
-        .monster-icon {
-            width: 100%;
-            height: auto;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: transform 0.2s;
-            border: 2px solid transparent;
-        }
-        .monster-icon:hover {
-            transform: scale(1.1);
-        }
-        .monster-selector-container {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .monster-selector-container input {
-            flex-grow: 1;
-        }
-        .select-button {
-            width: auto;
-            font-size: 18px;
-            padding: 18px 50px;
-        }
-        .input-group {
             margin-bottom: 10px;
         }
-        .monster-icon.selected {
-            border: 2px solid #007bff;
-            box-shadow: 0 0 5px #007bff;
-        }
-        
-        /* 💡 修正点: 詳細表示のテーブルを調整 */
-        .detailed-results-table {
-            width: auto; /* テーブルの幅をコンテンツに合わせる */
-            max-width: 400px; /* 最大幅を設定して、間延びを防ぐ */
-            margin-left: auto;
-            margin-right: auto;
-            font-size: 14px; /* フォントサイズを小さく */
-        }
-        .detailed-results-table th, .detailed-results-table td {
-            padding: 8px 12px; /* 余白を調整 */
-        }
-        #parent-summary-table td:last-child {
-            text-align: center;
-        }
+    }
+    
+    @media (max-width: 480px) {
+        .results-summary th, .results-summary td, .detailed-results th, .detailed-results td { padding: 8px; }
+        .input-with-buttons button { padding: 6px 10px; }
+    }
+    
+    /* 元のHTMLのスタイルを復元 */
+    .best-combination-result {
+        padding: 20px;
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 1.2em;
+    }
+    .best-combination-result h3 {
+        margin-top: 0;
+        color: #0056b3;
+    }
+    .best-combination-result p {
+        margin: 5px 0;
+    }
+    .highlight {
+        font-weight: bold;
+        color: #d9534f;
+        font-size: 1.5em;
+    }
+    .button-group {
+        display: flex;
+        gap: 10px;
+    }
+    .input-with-buttons {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .input-with-buttons input {
+        flex-grow: 1;
+    }
+    .secret-btn {
+        width: 100px;
+        align-items: stretch;
+        font-size: 18px;
+        padding: 20px 0;
+    }
+    .limit-btn {
+        width: 208px;
+        align-items: stretch;
+        font-size: 18px;
+        padding: 20px 0;
+    }
+    .target-affinity-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap; /* 💡 修正: 要素の折り返しを許可 */
+    }
+    .target-affinity-container select,
+    .target-affinity-container input {
+        width: auto;
+        flex-grow: 1;
+    }
 
-
-        /* 💡 スピナー表示とボタンサイズの修正 */
-        .loading-animation {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-left-color: #007bff;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            vertical-align: middle;
-            margin-left: 10px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        #loading-message {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #start-button {
-            padding: 12px 16px; font-size: 18px; 
-        }
-
-        /* 💡 リセットボタンのスタイル */
-        #reset-button {
-            background-color: #dc3545; /* 赤色 */
-            font-size: 18px;
-            width: auto; /* ボタンの幅をコンテンツに合わせる */
-            padding: 10px 15px; /* 「選択」ボタンと同じサイズに */
-        }
-        #reset-button:hover {
-            background-color: #c82333;
-        }
-        
-        /* 新しいUI要素のスタイル */
-        .mode-selection {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            font-size: 18px;
-        }
-        .mode-selection label {
-            display: inline-block;
-            margin-bottom: 0;
-        }
-        .monster-category-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            margin-top: 10px;
-        }
-        .monster-category-buttons button {
-            flex-grow: 1;
-            padding: 18px 20px;
-            font-size: 18px;
-            background-color: #e9ecef;
-            color: #333;
-            border: 1px solid #ccc;
-            width: calc(33.333% - 10px);
-        }
-        .monster-category-buttons button.selected {
-            background-color: #007bff;
-            color: white;
-        }
-        #selected-children-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        #selected-children-container .monster-icon {
-            width: 80px;
-            height: 80px;
-            border: 2px solid #007bff;
-        }
-#clear-selected-button {
-    background-color: #dc3545; /* 赤色 */
-    color: white; /* 文字色を白に */
-    border: 1px solid #dc3545;
-}
-
-#clear-selected-button:hover {
-    background-color: #c82333; /* ホバー時の暗い赤色 */
-}
-
-#confirm-button {
-    padding: 18px 80px; /* 上下左右の余白を調整してボタンを大きくします */
-}
-
-.manual-button-container {
-    text-align: right;
-    margin-bottom: 15px;
-}
-
-#manual-button {
-    padding: 18px 20px;
-    background-color: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
-    font-size: 18px;
-}
-
-#manual-button:hover {
-    background-color: #5a6268;
-}
-
-.manual-modal {
-    display: none;
-    position: fixed;
-    z-index: 100;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,0.6);
-    justify-content: center;
-    align-items: center;
-}
-
-.manual-iframe-container {
-    background-color: #fff;
-    padding: 10px;
-    border-radius: 8px;
-    max-width: 800px;
-    width: 90%;
-    height: 90%;
-    position: relative;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-
-.manual-iframe {
-    width: 100%;
-    height: calc(100% - 40px);
-    border: none;
-}
-
-    </style>
+    /* モンスター選択ポップアップのスタイル */
+    .monster-selector-modal {
+        display: none;
+        position: fixed;
+        z-index: 10;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.8);
+        padding-top: 50px;
+    }
+    .modal-content {
+        background-color: #fff;
+        margin: auto;
+        padding: 20px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 700px;
+        max-height: 90vh; /* 💡 修正: モーダルの最大高さを設定 */
+        overflow-y: auto; /* 💡 修正: 縦スクロールを有効に */
+    }
+    .close-button {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+    }
+    .close-button:hover,
+    .close-button:focus {
+        color: #000;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .monster-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+    }
+    .monster-icon {
+        width: 100%;
+        height: auto;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: transform 0.2s;
+        border: 2px solid transparent;
+    }
+    .monster-icon:hover {
+        transform: scale(1.1);
+    }
+    .monster-selector-container {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .monster-selector-container input {
+        flex-grow: 1;
+    }
+    .select-button {
+        width: auto;
+        font-size: 18px;
+        padding: 18px 50px;
+    }
+    .input-group {
+        margin-bottom: 10px;
+    }
+    .monster-icon.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 5px #007bff;
+    }
+    
+    .detailed-results-table {
+        width: auto;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+        font-size: 14px;
+    }
+    .detailed-results-table th, .detailed-results-table td {
+        padding: 8px 12px;
+    }
+    #parent-summary-table td:last-child {
+        text-align: center;
+    }
+    .loading-animation {
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        border-left-color: #007bff;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        vertical-align: middle;
+        margin-left: 10px;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    #loading-message {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    #start-button {
+        padding: 12px 16px; font-size: 18px;
+    }
+    #reset-button {
+        background-color: #dc3545;
+        font-size: 18px;
+        width: auto;
+        padding: 10px 15px;
+    }
+    #reset-button:hover {
+        background-color: #c82333;
+    }
+    .mode-selection {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 20px;
+        font-size: 18px;
+    }
+    .mode-selection label {
+        display: inline-block;
+        margin-bottom: 0;
+    }
+    .monster-category-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 10px;
+    }
+    .monster-category-buttons button {
+        flex-grow: 1;
+        padding: 18px 20px;
+        font-size: 18px;
+        background-color: #e9ecef;
+        color: #333;
+        border: 1px solid #ccc;
+        width: calc(33.333% - 10px);
+    }
+    .monster-category-buttons button.selected {
+        background-color: #007bff;
+        color: white;
+    }
+    #selected-children-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    #selected-children-container .monster-icon {
+        width: 80px;
+        height: 80px;
+        border: 2px solid #007bff;
+    }
+    #clear-selected-button {
+        background-color: #dc3545;
+        color: white;
+        border: 1px solid #dc3545;
+    }
+    #clear-selected-button:hover {
+        background-color: #c82333;
+    }
+    #confirm-button {
+        padding: 18px 80px;
+    }
+    .manual-button-container {
+        text-align: right;
+        margin-bottom: 15px;
+    }
+    #manual-button {
+        padding: 18px 20px;
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 18px;
+    }
+    #manual-button:hover {
+        background-color: #5a6268;
+    }
+    .manual-modal {
+        display: none;
+        position: fixed;
+        z-index: 100;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.6);
+        justify-content: center;
+        align-items: center;
+    }
+    .manual-iframe-container {
+        background-color: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        max-width: 800px;
+        width: 90%;
+        height: 90%;
+        position: relative;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    .manual-iframe {
+        width: 100%;
+        height: calc(100% - 40px);
+        border: none;
+    }
+</style>
 </head>
 <body>
     <div class="container">
