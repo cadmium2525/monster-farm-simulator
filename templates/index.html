@@ -472,7 +472,6 @@
                 <div class="button-group">
                     <button type="submit" id="start-button">探索開始</button>
                     <button type="button" id="reset-button">入力リセット</button>
-                    <button type="button" id="cancel-button" style="display: none;">探索中止</button>
                 </div>
             </form>
         </div>
@@ -565,7 +564,6 @@
 <script>
     const form = document.getElementById('exploration-form');
     const startButton = document.getElementById('start-button');
-    const cancelButton = document.getElementById('cancel-button');
     const loadingMessage = document.getElementById('loading-message');
     const parentSummarySection = document.getElementById('parent-summary-section');
     const parentSummaryTableBody = document.querySelector('#parent-summary-table tbody');
@@ -610,12 +608,11 @@
     updateSelectedChildrenUI();
 
     function toggleForm(disabled) {
-        const inputs = form.querySelectorAll('input, select, button:not(#cancel-button)');
+        const inputs = form.querySelectorAll('input, select, button:not(#start-button):not(#reset-button)');
         inputs.forEach(input => {
             input.disabled = disabled;
         });
-        startButton.style.display = disabled ? 'none' : 'inline-block';
-        cancelButton.style.display = disabled ? 'inline-block' : 'none';
+        startButton.disabled = disabled;
         
         loadingMessage.style.display = disabled ? 'flex' : 'none';
     }

@@ -346,9 +346,9 @@ def explore_combinations():
         
         # 20250829改修: 高速モードの探索ロジックを改善
         if is_fast_mode:
-            sample_size = min(20000, total_combinations)
-            # C値が高い上位の親ペアを抽出 (上位1000件、または全件数の10%のいずれか少ない方)
-            top_c_pairs_count = min(1000, len(sorted_c_pairs) // 10)
+            sample_size = min(15000, total_combinations)
+            # C値が高い上位の親ペアを抽出 (上位1000件、または全件数の30%のいずれか少ない方)
+            top_c_pairs_count = min(1000, len(sorted_c_pairs) // 30)
             top_c_pairs = sorted_c_pairs[:top_c_pairs_count]
             print(f"総計算量 ({total_combinations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、C値上位 {top_c_pairs_count} 件の親ペアと高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
             
@@ -499,9 +499,9 @@ def explore_multi_combinations():
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
-        sample_size = min(20000, total_calculations)
+        sample_size = min(15000, total_calculations)
         # 20250829改修: C値の高い親ペアを優先したサンプリング
-        top_c_pairs_count = min(100, len(sorted_c_pairs) // 10)
+        top_c_pairs_count = min(1000, len(sorted_c_pairs) // 30)
         top_c_pairs = sorted_c_pairs[:top_c_pairs_count]
         print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、C値上位 {top_c_pairs_count} 件の親ペアと高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
         exploration_iterator = (
