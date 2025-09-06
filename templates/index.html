@@ -854,25 +854,7 @@
         });
     });
 
-    cancelButton.addEventListener('click', function() {
-        if (!currentRequestId) return;
-        
-        console.log("探索中止ボタンがクリックされました。");
-        fetch('/cancel_exploration', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ request_id: currentRequestId }),
-        })
-        .then(() => {
-            toggleForm(false);
-            alert("探索が中止されました。");
-        })
-        .catch(error => {
-            console.error('キャンセルリクエスト送信エラー:', error);
-            toggleForm(false);
-            alert("キャンセルリクエストの送信中にエラーが発生しました。");
-        });
-    });
+
 
 function displayBestCombination(results) {
     bestCombinationSection.style.display = 'block';
