@@ -95,65 +95,34 @@ def get_c_value(p1, p2):
 
 # ヘルパー関数: A値またはB値を取得 (祖父母の最適化も含む)
 def get_ab_value(parent, child, fixed_gp=None, fixed_gm=None, excluded_monsters=None):
+    # 修正箇所: fixed_gpまたはfixed_gmが指定されている場合は、その値が除外リストにあっても探索対象とする
+    
+    # 固定された祖父母が両方指定されている場合は、その値をそのまま使用
     if fixed_gp is not None and fixed_gm is not None:
         return part_affinity_lookup.get((parent, fixed_gp, fixed_gm, child), -1), fixed_gp, fixed_gm
-    
+
     base_ab_val, base_gp, base_gm = best_ab_lookup.get((parent, child), (None, None, None))
     
-    if excluded_monsters and (base_gp in excluded_monsters or base_gm in excluded_monsters):
-        max_affinity = -1
-        best_gp = None
-        best_gm = None
-        explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
-        
-        if fixed_gp is not None:
-            for gm in explorable_bloodlines:
-                affinity = part_affinity_lookup.get((parent, fixed_gp, gm, child), None)
-                if affinity is not None and affinity > max_affinity:
-                    max_affinity = affinity
-                    best_gm = gm
-            return max_affinity, fixed_gp, best_gm
-            
-        elif fixed_gm is not None:
-            for gp in explorable_bloodlines:
-                affinity = part_affinity_lookup.get((parent, gp, fixed_gm, child), None)
-                if affinity is not None and affinity > max_affinity:
-                    max_affinity = affinity
-                    best_gp = gp
-            return max_affinity, best_gp, fixed_gm
-            
-        else:
-            for gp_new, gm_new in itertools.product(explorable_bloodlines, repeat=2):
-                affinity = part_affinity_lookup.get((parent, gp_new, gm_new, child), None)
-                if affinity is not None and affinity > max_affinity:
-                    max_affinity = affinity
-                    best_gp = gp_new
-                    best_gm = gm_new
-            return max_affinity, best_gp, best_gm
-            
-    else:
-        if fixed_gp is not None:
-            max_affinity = -1
-            best_gm = None
-            for gm in all_bloodlines:
-                affinity = part_affinity_lookup.get((parent, fixed_gp, gm, child), None)
-                if affinity is not None and affinity > max_affinity:
-                    max_affinity = affinity
-                    best_gm = gm
-            return max_affinity, fixed_gp, best_gm
-            
-        elif fixed_gm is not None:
-            max_affinity = -1
-            best_gp = None
-            for gp in all_bloodlines:
-                affinity = part_affinity_lookup.get((parent, gp, fixed_gm, child), None)
-                if affinity is not None and affinity > max_affinity:
-                    max_affinity = affinity
-                    best_gp = gp
-            return max_affinity, best_gp, fixed_gm
-            
-        else:
-            return base_ab_val if base_ab_val is not None else -1, base_gp, base_gm
+    # 既存のロジックを簡潔に修正
+    max_affinity = -1
+    best_gp = None
+    best_gm = None
+    
+    # 祖父母の候補リストを、固定値と除外リストを考慮して作成
+    gp_candidates = [fixed_gp] if fixed_gp is not None else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    gm_candidates = [fixed_gm] if fixed_gm is not None else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    
+    if not gp_candidates or not gm_candidates:
+        return -1, None, None
+
+    for gp_new, gm_new in itertools.product(gp_candidates, gm_candidates):
+        affinity = part_affinity_lookup.get((parent, gp_new, gm_new, child), None)
+        if affinity is not None and affinity > max_affinity:
+            max_affinity = affinity
+            best_gp = gp_new
+            best_gm = gm_new
+
+    return max_affinity, best_gp, best_gm
 
 # ヘルパー関数: 総相性値を計算
 def calculate_affinity(child, p1, p2, gp1, gm1, gp2, gm2, fixed_bonus):
@@ -227,7 +196,15 @@ def explore_combinations():
         target_min, _ = TARGET_AFFINITY_SCORES.get(target_symbol, (496, 614))
 
     all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
-    explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
+
+    # 修正箇所: 探索対象の候補リストを動的に生成
+    # 固定されたスロットは除外リストから影響を受けない
+    p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
 
     if not any(v is None for k, v in fixed_slots.items() if k != 'child'):
         child = fixed_slots['child'] if fixed_slots['child'] else 'dummy'
@@ -273,11 +250,8 @@ def explore_combinations():
         
         child_bl = fixed_slots['child']
         
-        parent_candidates_p1 = [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines
-        parent_candidates_p2 = [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
-        
         processed_count = 0
-        for p1_cand, p2_cand in itertools.product(parent_candidates_p1, parent_candidates_p2):
+        for p1_cand, p2_cand in itertools.product(p1_candidates, p2_candidates):
             if cancellation_flags.get(request_id, False):
                 return jsonify({"error": "探索が中止されました"}), 500
             
@@ -328,14 +302,7 @@ def explore_combinations():
     else:
         print("--- 子が指定されていないため、サマリーを生成します ---")
         
-        # 候補リストの準備
-        p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else explorable_bloodlines
-        gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else explorable_bloodlines
-        gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else explorable_bloodlines
-        p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else explorable_bloodlines
-        gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else explorable_bloodlines
-        gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else explorable_bloodlines
-        
+        # 候補リストの準備 (上記の修正されたリストを使用)
         total_combinations = len(p1_candidates) * len(gp1_candidates) * len(gm1_candidates) * len(p2_candidates) * len(gp2_candidates) * len(gm2_candidates)
         
         EXPLORATION_THRESHOLD = 250_000
@@ -374,10 +341,14 @@ def explore_combinations():
             
             p1, gp1, gm1, p2, gp2, gm2 = combo
             
-            # 除外モンスターのチェック
-            if p1 in excluded_monsters or p2 in excluded_monsters or \
-               gp1 in excluded_monsters or gm1 in excluded_monsters or \
-               gp2 in excluded_monsters or gm2 in excluded_monsters:
+            # 修正箇所: 除外モンスターのチェックは探索候補リスト生成時に行われているため、この部分は不要
+            # ただし、念のため固定スロットと除外リストの不整合を考慮して元のロジックを保持
+            if (fixed_slots['parent1'] is None and p1 in excluded_monsters) or \
+               (fixed_slots['parent2'] is None and p2 in excluded_monsters) or \
+               (fixed_slots['grandpa1'] is None and gp1 in excluded_monsters) or \
+               (fixed_slots['grandma1'] is None and gm1 in excluded_monsters) or \
+               (fixed_slots['grandpa2'] is None and gp2 in excluded_monsters) or \
+               (fixed_slots['grandma2'] is None and gm2 in excluded_monsters):
                 continue
 
             c_val = get_c_value(p1, p2)
@@ -477,16 +448,17 @@ def explore_multi_combinations():
     fixed_bonus = common_secret_bonus + SUB_BLOODLINE_RARE_BONUS
 
     all_bloodlines = part_affinity_df['child_bloodline'].cat.categories.tolist()
-    explorable_bloodlines = [bl for bl in all_bloodlines if bl not in excluded_monsters]
-
+    
+    # 修正箇所: 探索候補リストを動的に生成
+    # 固定されたスロットは除外リストから影響を受けない
     slot_names = ['parent1', 'grandpa1', 'grandma1', 'parent2', 'grandpa2', 'grandma2']
     candidate_lists = []
     for slot in slot_names:
         if fixed_slots[slot]:
             candidate_lists.append([fixed_slots[slot]])
         else:
-            candidate_lists.append(explorable_bloodlines)
-            
+            candidate_lists.append([bl for bl in all_bloodlines if bl not in excluded_monsters])
+
     best_min_affinity = -1
     best_combination = None
     processed_count = 0
@@ -500,10 +472,20 @@ def explore_multi_combinations():
 
     if is_fast_mode:
         sample_size = min(20000, total_calculations)
-        # 20250829改修: C値の高い親ペアを優先したサンプリング
+        
+        # 修正箇所: 高速モードのロジック
         top_c_pairs_count = min(1000, len(sorted_c_pairs) // 30)
-        top_c_pairs = sorted_c_pairs[:top_c_pairs_count]
-        print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、C値上位 {top_c_pairs_count} 件の親ペアと高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
+        
+        # 除外モンスターを考慮した親ペアリストを新たに作成
+        filtered_c_pairs = [
+            pair for pair in sorted_c_pairs[:top_c_pairs_count] 
+            if (fixed_slots['parent1'] is not None or pair[0] not in excluded_monsters) and
+               (fixed_slots['parent2'] is not None or pair[1] not in excluded_monsters)
+        ]
+        
+        print(f"総計算量 ({total_calculations}) が閾値 ({EXPLORATION_THRESHOLD}) を超えたため、C値上位 {len(filtered_c_pairs)} 件の親ペアと高速モードで探索します（{sample_size}件の組み合わせをサンプリング）。")
+        
+        # 修正箇所: filtered_c_pairsからサンプリング
         exploration_iterator = (
             (
                 parent_pair[0],
@@ -512,7 +494,7 @@ def explore_multi_combinations():
                 parent_pair[1],
                 random.choice(candidate_lists[4]),
                 random.choice(candidate_lists[5])
-            ) for parent_pair in random.choices(top_c_pairs, k=sample_size)
+            ) for parent_pair in random.choices(filtered_c_pairs, k=sample_size)
         )
 
     else:
@@ -524,12 +506,6 @@ def explore_multi_combinations():
             return jsonify({"error": "探索が中止されました"}), 500
 
         p1_cand, gp1_cand, gm1_cand, p2_cand, gp2_cand, gm2_cand = combo
-
-        # 修正箇所: ここで除外モンスターのチェックを再度追加
-        if p1_cand in excluded_monsters or p2_cand in excluded_monsters or \
-           gp1_cand in excluded_monsters or gm1_cand in excluded_monsters or \
-           gp2_cand in excluded_monsters or gm2_cand in excluded_monsters:
-            continue
 
         c_val = get_c_value(p1_cand, p2_cand)
         if c_val is None:
