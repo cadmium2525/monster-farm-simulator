@@ -338,7 +338,7 @@ def explore_combinations():
         
         total_combinations = len(p1_candidates) * len(gp1_candidates) * len(gm1_candidates) * len(p2_candidates) * len(gp2_candidates) * len(gm2_candidates)
         
-        EXPLORATION_THRESHOLD = 500_000
+        EXPLORATION_THRESHOLD = 250_000
         is_fast_mode = total_combinations > EXPLORATION_THRESHOLD
 
         final_summary_list = [] # 網羅的探索用
@@ -495,7 +495,7 @@ def explore_multi_combinations():
     for cand_list in candidate_lists:
         total_calculations *= len(cand_list)
 
-    EXPLORATION_THRESHOLD = 500_000
+    EXPLORATION_THRESHOLD = 250_000
     is_fast_mode = total_calculations > EXPLORATION_THRESHOLD
 
     if is_fast_mode:
