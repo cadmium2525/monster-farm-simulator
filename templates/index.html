@@ -509,6 +509,11 @@
         async function startSearch() {
             if (isSearching) return;
 
+            // ボタンの表示を更新
+            const searchButton = document.getElementById('search_button');
+            searchButton.disabled = true;
+            searchButton.textContent = '探索中...';
+
             const parent1_val = selectedMonsters.parent1.length > 0 ? selectedMonsters.parent1[0] : null;
             const grandpa1_val = selectedMonsters.parent1_grandpa.length > 0 ? selectedMonsters.parent1_grandpa[0] : null;
             const grandma1_val = selectedMonsters.parent1_grandma.length > 0 ? selectedMonsters.parent1_grandma[0] : null;
@@ -535,7 +540,6 @@
                 limit
             };
 
-            document.getElementById('search_button').disabled = true;
             document.getElementById('results_section').classList.add('hidden');
             isSearching = true;
 
@@ -564,7 +568,8 @@
                 showMessageBox("探索中にエラーが発生しました。サーバーとの接続を確認してください。", "エラー");
             } finally {
                 isSearching = false;
-                document.getElementById('search_button').disabled = false;
+                searchButton.disabled = false;
+                searchButton.textContent = '探索開始';
                 currentSearchId = null;
             }
         }

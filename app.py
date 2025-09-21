@@ -209,12 +209,21 @@ def explore_combinations():
         print("--- マルチモード探索開始 ---")
 
         # 修正箇所: 探索対象の候補リストをユーザーの固定値を考慮して生成
-        p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-        gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-        gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-        p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-        gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-        gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+        # 除外リストから固定モンスターを外す
+        temp_excluded = excluded_monsters.copy()
+        if fixed_slots['parent1']: temp_excluded.discard(fixed_slots['parent1'])
+        if fixed_slots['parent2']: temp_excluded.discard(fixed_slots['parent2'])
+        if fixed_slots['grandpa1']: temp_excluded.discard(fixed_slots['grandpa1'])
+        if fixed_slots['grandma1']: temp_excluded.discard(fixed_slots['grandma1'])
+        if fixed_slots['grandpa2']: temp_excluded.discard(fixed_slots['grandpa2'])
+        if fixed_slots['grandma2']: temp_excluded.discard(fixed_slots['grandma2'])
+
+        p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+        gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+        gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+        p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+        gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+        gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
 
         best_min_affinity = -1
         best_combination = None
@@ -235,7 +244,7 @@ def explore_combinations():
                 pair for pair in sorted_c_pairs[:top_c_pairs_count] 
                 if (fixed_slots['parent1'] is None or pair[0] == fixed_slots['parent1']) and
                    (fixed_slots['parent2'] is None or pair[1] == fixed_slots['parent2']) and
-                   (pair[0] not in excluded_monsters) and (pair[1] not in excluded_monsters)
+                   (pair[0] not in temp_excluded) and (pair[1] not in temp_excluded)
             ]
             
             if fixed_slots['parent1'] and fixed_slots['parent2'] and (fixed_slots['parent1'], fixed_slots['parent2']) not in filtered_c_pairs:
@@ -324,12 +333,21 @@ def explore_combinations():
     # ここから元の/exploreロジック
     
     # 修正箇所: 探索対象の候補リストを動的に生成
-    p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-    p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-    gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-    gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-    gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
-    gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else [bl for bl in all_bloodlines if bl not in excluded_monsters]
+    # 除外リストから固定モンスターを外す
+    temp_excluded = excluded_monsters.copy()
+    if fixed_slots['parent1']: temp_excluded.discard(fixed_slots['parent1'])
+    if fixed_slots['parent2']: temp_excluded.discard(fixed_slots['parent2'])
+    if fixed_slots['grandpa1']: temp_excluded.discard(fixed_slots['grandpa1'])
+    if fixed_slots['grandma1']: temp_excluded.discard(fixed_slots['grandma1'])
+    if fixed_slots['grandpa2']: temp_excluded.discard(fixed_slots['grandpa2'])
+    if fixed_slots['grandma2']: temp_excluded.discard(fixed_slots['grandma2'])
+
+    p1_candidates = [fixed_slots['parent1']] if fixed_slots['parent1'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+    p2_candidates = [fixed_slots['parent2']] if fixed_slots['parent2'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+    gp1_candidates = [fixed_slots['grandpa1']] if fixed_slots['grandpa1'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+    gm1_candidates = [fixed_slots['grandma1']] if fixed_slots['grandma1'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+    gp2_candidates = [fixed_slots['grandpa2']] if fixed_slots['grandpa2'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
+    gm2_candidates = [fixed_slots['grandma2']] if fixed_slots['grandma2'] else [bl for bl in all_bloodlines if bl not in temp_excluded]
     
     # 親祖父母全て固定 (子が指定されていない場合)
     if not fixed_slots['child'] and is_all_parents_fixed:
@@ -369,7 +387,7 @@ def explore_combinations():
                 child=child_bl,
                 fixed_gp=fixed_slots['grandpa1'],
                 fixed_gm=fixed_slots['grandma1'],
-                excluded_monsters=excluded_monsters
+                excluded_monsters=temp_excluded
             )
             
             best_b_val, best_gp2, best_gm2 = get_ab_value(
@@ -377,7 +395,7 @@ def explore_combinations():
                 child=child_bl,
                 fixed_gp=fixed_slots['grandpa2'],
                 fixed_gm=fixed_slots['grandma2'],
-                excluded_monsters=excluded_monsters
+                excluded_monsters=temp_excluded
             )
             
             if best_a_val != -1 and best_b_val != -1:
@@ -422,7 +440,7 @@ def explore_combinations():
                 pair for pair in sorted_c_pairs
                 if (fixed_slots['parent1'] is None or pair[0] == fixed_slots['parent1']) and
                    (fixed_slots['parent2'] is None or pair[1] == fixed_slots['parent2']) and
-                   (pair[0] not in excluded_monsters) and (pair[1] not in excluded_monsters)
+                   (pair[0] not in temp_excluded) and (pair[1] not in temp_excluded)
             ]
             
             # ユーザーが特定の親ペアを固定した場合、そのペアを必ず探索対象に含める
@@ -442,13 +460,13 @@ def explore_combinations():
             
             exploration_iterator = (
                 (
-                    parent_pair[0],
+                    random.choice(p1_candidates),
                     random.choice(gp1_candidates),
                     random.choice(gm1_candidates),
-                    parent_pair[1],
+                    random.choice(p2_candidates),
                     random.choice(gp2_candidates),
                     random.choice(gm2_candidates)
-                ) for parent_pair in random.choices(c_pairs_to_sample, k=sample_size)
+                ) for _ in range(sample_size)
             )
 
         else:
@@ -570,4 +588,4 @@ def get_details():
     return jsonify({'results': detailed_results})
     
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
